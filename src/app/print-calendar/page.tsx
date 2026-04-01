@@ -467,9 +467,18 @@ export default function PrintCalendarPage() {
         }
 
         /* ═══ A4 Print (Standard — no image, full page calendar) ═══ */
-        .cal-type-a4 .cal-cell { height: 90px; }
+        .cal-type-a4 .cal-image { display: none; }
+        .cal-type-a4 .cal-cell { height: 105px; }
+        .cal-type-a4 { padding-top: 20px; }
+        .cal-type-a4 .cal-date { font-size: 1.2rem; }
+        .cal-type-a4 .cal-tithi { font-size: 0.7rem; }
+        .cal-type-a4 .cal-paksha { font-size: 0.6rem; }
+        .cal-type-a4 .cal-event-name { font-size: 0.55rem; }
+        .cal-type-a4 .cal-title-hi { font-size: 1.5rem; }
+        .cal-type-a4 .cal-month { font-size: 1.7rem; }
         @media print {
-          .cal-type-a4 { padding: 10px; }
+          .cal-type-a4 { padding: 10px; padding-top: 15px; min-height: 100vh; }
+          .cal-type-a4 .cal-cell { height: 110px; }
           @page { size: A4 portrait; margin: 8mm; }
         }
 
