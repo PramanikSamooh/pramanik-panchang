@@ -229,6 +229,8 @@ export default function PrintCalendarPage() {
             </div>
           )}
 
+          {/* Calendar section — pushed to bottom */}
+          <div className="cal-table-wrapper">
           {/* Header */}
           <div className="cal-header">
             <div className="cal-title">
@@ -298,6 +300,7 @@ export default function PrintCalendarPage() {
           <div className="cal-footer">
             प्रमाणिक समूह · munipramansagar.net · gunayatan.com · Pramanik Panchang {year}
           </div>
+          </div>{/* end cal-table-wrapper */}
         </div>
       </div>
 
@@ -317,8 +320,12 @@ export default function PrintCalendarPage() {
           background: white;
           color: #1a1a1a;
           padding: 20px;
+          padding-top: 40px; /* margin for pin hole / spiral binding */
           border-radius: 12px;
           font-family: 'Segoe UI', system-ui, sans-serif;
+          display: flex;
+          flex-direction: column;
+          min-height: 100%;
         }
 
         .cal-image {
@@ -327,6 +334,11 @@ export default function PrintCalendarPage() {
           border-radius: 8px 8px 0 0;
           margin-bottom: 8px;
           background: #f5f0e8;
+          flex-shrink: 0;
+        }
+
+        .cal-table-wrapper {
+          margin-top: auto; /* push calendar to bottom */
         }
         .cal-image img {
           width: 100%;
@@ -393,8 +405,9 @@ export default function PrintCalendarPage() {
         .cal-type-wall .cal-image { height: 380px; }
         .cal-type-wall .cal-image img { height: 380px; }
         .cal-type-wall .cal-cell { height: 75px; }
+        .cal-type-wall { padding-top: 50px; } /* extra space for spiral/pin */
         @media print {
-          .cal-type-wall { padding: 10px; }
+          .cal-type-wall { padding: 10px; padding-top: 45px; min-height: 100vh; }
           .cal-type-wall .cal-image { height: 360px; }
           @page { size: A3 portrait; margin: 8mm; }
         }
@@ -430,8 +443,9 @@ export default function PrintCalendarPage() {
         .cal-type-a3 .cal-date { font-size: 1.2rem; }
         .cal-type-a3 .cal-title-hi { font-size: 1.6rem; }
         .cal-type-a3 .cal-month { font-size: 1.8rem; }
+        .cal-type-a3 { padding-top: 50px; }
         @media print {
-          .cal-type-a3 { padding: 12px; }
+          .cal-type-a3 { padding: 12px; padding-top: 45px; min-height: 100vh; }
           @page { size: A3 portrait; margin: 8mm; }
         }
 
