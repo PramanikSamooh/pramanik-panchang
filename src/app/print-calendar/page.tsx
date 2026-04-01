@@ -25,18 +25,48 @@ const CALENDAR_TYPES: { key: CalendarType; label: string; desc: string; size: st
   { key: "a3", label: "A3 Poster", desc: "Large poster with image and calendar", size: "A3 (297×420mm)", imageSize: "2480 × 1470 px", imageRatio: "5:3 landscape" },
 ];
 
+// Unique month key: "2026-04" format
+interface MonthEntry {
+  key: string; // "2026-04"
+  month: number; // 0-11
+  year: number;
+  label: string; // "April 2026"
+  labelHi: string; // "अप्रैल 2026"
+}
+
 export default function PrintCalendarPage() {
   const [panchangData, setPanchangData] = useState<PanchangDay[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState(0);
-  const [year, setYear] = useState(new Date().getFullYear());
+  const [selectedMonthKey, setSelectedMonthKey] = useState("");
   const [loaded, setLoaded] = useState(false);
 
-  // Settings
   const [calendarType, setCalendarType] = useState<CalendarType>("a4");
   const [showImages, setShowImages] = useState(false);
-  const [monthImages, setMonthImages] = useState<Record<number, string>>({});
+  const [monthImages, setMonthImages] = useState<Record<string, string>>({}); // keyed by "2026-04"
 
   const printRef = useRef<HTMLDivElement>(null);
+
+  // Derive available months from generated data
+  const availableMonths: MonthEntry[] = (() => {
+    const seen = new Set<string>();
+    const months: MonthEntry[] = [];
+    for (const d of panchangData) {
+      const [y, m] = d.date.split("-");
+      const key = `${y}-${m}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        const mi = parseInt(m) - 1;
+        const yi = parseInt(y);
+        months.push({
+          key,
+          month: mi,
+          year: yi,
+          label: `${MONTHS[mi]} ${yi}`,
+          labelHi: `${MONTHS_HI[mi]} ${yi}`,
+        });
+      }
+    }
+    return months;
+  })();
 
   useEffect(() => {
     const saved = localStorage.getItem("pramanik_panchang_data");
@@ -44,38 +74,45 @@ export default function PrintCalendarPage() {
       try {
         const data = JSON.parse(saved) as PanchangDay[];
         setPanchangData(data);
-        if (data.length > 0) setYear(parseInt(data[0].date.split("-")[0]));
+        // Auto-select first month
+        if (data.length > 0) {
+          const [y, m] = data[0].date.split("-");
+          setSelectedMonthKey(`${y}-${m}`);
+        }
         setLoaded(true);
       } catch { setLoaded(true); }
     } else {
       setLoaded(true);
     }
-    // Load saved images
     const savedImages = localStorage.getItem("pramanik_calendar_images");
     if (savedImages) {
       try { setMonthImages(JSON.parse(savedImages)); } catch {}
     }
   }, []);
 
-  function handleImageUpload(monthIdx: number, file: File) {
+  function handleImageUpload(monthKey: string, file: File) {
     const reader = new FileReader();
     reader.onload = (e) => {
       const url = e.target?.result as string;
-      const updated = { ...monthImages, [monthIdx]: url };
+      const updated = { ...monthImages, [monthKey]: url };
       setMonthImages(updated);
       localStorage.setItem("pramanik_calendar_images", JSON.stringify(updated));
     };
     reader.readAsDataURL(file);
   }
 
-  function removeImage(monthIdx: number) {
+  function removeImage(monthKey: string) {
     const updated = { ...monthImages };
-    delete updated[monthIdx];
+    delete updated[monthKey];
     setMonthImages(updated);
     localStorage.setItem("pramanik_calendar_images", JSON.stringify(updated));
   }
 
-  const monthDays = panchangData.filter((d) => parseInt(d.date.split("-")[1]) - 1 === selectedMonth);
+  const selectedEntry = availableMonths.find((m) => m.key === selectedMonthKey);
+  const monthDays = panchangData.filter((d) => {
+    const [y, m] = d.date.split("-");
+    return `${y}-${m}` === selectedMonthKey;
+  });
 
   // Build weeks grid
   const weeks: (PanchangDay | null)[][] = [];
@@ -110,7 +147,7 @@ export default function PrintCalendarPage() {
 
   const currentTypeInfo = CALENDAR_TYPES.find((t) => t.key === calendarType)!;
   const isLandscape = calendarType === "table";
-  const hasImage = showImages && monthImages[selectedMonth];
+  const hasImage = showImages && monthImages[selectedMonthKey];
 
   return (
     <>
@@ -166,19 +203,19 @@ export default function PrintCalendarPage() {
             <div className="mb-3 rounded-lg bg-gray-800 px-3 py-2 text-xs">
               <span className="text-orange-400 font-semibold">Recommended image size for {currentTypeInfo.label}:</span>{" "}
               <span className="text-gray-300">{currentTypeInfo.imageSize} ({currentTypeInfo.imageRatio})</span>
-              <span className="text-gray-500 ml-2">— Use landscape images. Images will be scaled to fit width, cropped from center if aspect ratio differs.</span>
+              <span className="text-gray-500 ml-2">— Use landscape images. Images will be scaled to fit width.</span>
             </div>
           )}
           {showImages && (
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-              {MONTHS.map((m, i) => (
-                <div key={m} className="text-center">
-                  <div className="text-[10px] text-gray-400 mb-1">{m}</div>
-                  {monthImages[i] ? (
+              {availableMonths.map((m) => (
+                <div key={m.key} className="text-center">
+                  <div className="text-[10px] text-gray-400 mb-1">{m.label}</div>
+                  {monthImages[m.key] ? (
                     <div className="relative">
-                      <img src={monthImages[i]} alt={m} className="w-full h-16 object-cover rounded border border-gray-700" />
+                      <img src={monthImages[m.key]} alt={m.label} className="w-full h-16 object-cover rounded border border-gray-700" />
                       <button
-                        onClick={() => removeImage(i)}
+                        onClick={() => removeImage(m.key)}
                         className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
                       >×</button>
                     </div>
@@ -191,7 +228,7 @@ export default function PrintCalendarPage() {
                         className="hidden"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
-                          if (file) handleImageUpload(i, file);
+                          if (file) handleImageUpload(m.key, file);
                         }}
                       />
                     </label>
@@ -204,15 +241,15 @@ export default function PrintCalendarPage() {
 
         {/* Month Selector */}
         <div className="flex gap-2 flex-wrap">
-          {MONTHS.map((m, i) => (
+          {availableMonths.map((m) => (
             <button
-              key={m}
-              onClick={() => setSelectedMonth(i)}
+              key={m.key}
+              onClick={() => setSelectedMonthKey(m.key)}
               className={`rounded-lg px-3 py-1.5 text-sm ${
-                selectedMonth === i ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white border border-gray-700"
+                selectedMonthKey === m.key ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white border border-gray-700"
               }`}
             >
-              {m}
+              {m.label}
             </button>
           ))}
         </div>
@@ -225,7 +262,7 @@ export default function PrintCalendarPage() {
           {/* Image (if enabled) */}
           {hasImage && (
             <div className="cal-image">
-              <img src={monthImages[selectedMonth]} alt={MONTHS[selectedMonth]} />
+              <img src={monthImages[selectedMonthKey]} alt={selectedEntry?.label || ""} />
             </div>
           )}
 
@@ -235,10 +272,10 @@ export default function PrintCalendarPage() {
           <div className="cal-header">
             <div className="cal-title">
               <span className="cal-title-hi">प्रमाणिक पंचांग</span>
-              <span className="cal-title-year">वीर नि.सं. {monthDays[0]?.vnsYear || year + 526} — {year}</span>
+              <span className="cal-title-year">वीर नि.सं. {monthDays[0]?.vnsYear || ""} — {selectedEntry?.year || ""}</span>
             </div>
             <div className="cal-month">
-              {MONTHS_HI[selectedMonth]} / {MONTHS[selectedMonth]} {year}
+              {selectedEntry ? `${selectedEntry.labelHi} / ${selectedEntry.label}` : ""}
             </div>
           </div>
 
@@ -298,7 +335,7 @@ export default function PrintCalendarPage() {
 
           {/* Footer */}
           <div className="cal-footer">
-            प्रमाणिक समूह · munipramansagar.net · gunayatan.com · Pramanik Panchang {year}
+            प्रमाणिक समूह · munipramansagar.net · gunayatan.com · Pramanik Panchang {selectedEntry?.year || ""}
           </div>
           </div>{/* end cal-table-wrapper */}
         </div>
