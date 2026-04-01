@@ -468,6 +468,7 @@ export default function PrintCalendarPage() {
 
         /* ═══ A4 Print (Standard — no image, full page calendar) ═══ */
         .cal-type-a4 .cal-image { display: none; }
+        .cal-type-a4 .cal-table-wrapper { margin-top: 0; }
         .cal-type-a4 .cal-cell { height: 105px; }
         .cal-type-a4 { padding-top: 20px; }
         .cal-type-a4 .cal-date { font-size: 1.2rem; }
