@@ -467,10 +467,17 @@ export default function PrintCalendarPage() {
           @page { size: A5 landscape; margin: 5mm; }
         }
 
-        /* ═══ A4 Calendar (no image, large fonts, full page) ═══ */
+        /* ═══ A4 Calendar (no image, large fonts, full page stretched) ═══ */
         .cal-type-a4 .cal-image { display: none; }
-        .cal-type-a4 .cal-table-wrapper { margin-top: 0; }
-        .cal-type-a4 { padding: 15px; padding-top: 12px; }
+        .cal-type-a4 .cal-table-wrapper { margin-top: 0; flex: 1; display: flex; flex-direction: column; }
+        .cal-type-a4 .cal-table { flex: 1; display: flex; flex-direction: column; }
+        .cal-type-a4 .cal-table thead { flex-shrink: 0; }
+        .cal-type-a4 .cal-table tbody { flex: 1; display: flex; flex-direction: column; }
+        .cal-type-a4 .cal-table tbody tr { flex: 1; display: flex; }
+        .cal-type-a4 .cal-table tbody tr td { flex: 1; }
+        .cal-type-a4 .cal-table thead tr { display: flex; }
+        .cal-type-a4 .cal-table thead tr th { flex: 1; }
+        .cal-type-a4 { padding: 12px; padding-top: 10px; height: 100vh; }
         .cal-type-a4 .cal-date { font-size: 1.6rem; font-weight: 800; }
         .cal-type-a4 .cal-tithi { font-size: 0.85rem; }
         .cal-type-a4 .cal-paksha { font-size: 0.7rem; }
@@ -479,12 +486,13 @@ export default function PrintCalendarPage() {
         .cal-type-a4 .cal-day-en { font-size: 0.7rem; }
         .cal-type-a4 .cal-title-hi { font-size: 1.6rem; }
         .cal-type-a4 .cal-month { font-size: 1.8rem; }
-        .cal-type-a4 .cal-header { margin-bottom: 10px; }
-        .cal-type-a4 .cal-cell { height: auto; padding: 5px 6px; }
+        .cal-type-a4 .cal-header { margin-bottom: 8px; flex-shrink: 0; }
+        .cal-type-a4 .cal-footer { flex-shrink: 0; }
+        .cal-type-a4 .cal-cell { padding: 5px 6px; }
         .cal-type-a4 .cal-kshaya { font-size: 0.65rem; }
         .cal-type-a4 .cal-vriddhi { font-size: 0.65rem; }
         @media print {
-          .cal-type-a4 { padding: 8px; }
+          .cal-type-a4 { padding: 6px; height: 100vh; }
           @page { size: A4 portrait; margin: 6mm; }
         }
 
