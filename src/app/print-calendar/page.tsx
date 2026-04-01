@@ -18,11 +18,11 @@ const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 type CalendarType = "wall" | "table" | "a4" | "a3";
 
-const CALENDAR_TYPES: { key: CalendarType; label: string; desc: string; size: string }[] = [
-  { key: "wall", label: "Wall Calendar", desc: "Portrait, image on top, calendar below", size: "A3 (297×420mm) or 12×18 inch" },
-  { key: "table", label: "Table Calendar", desc: "Landscape, compact, tent-fold", size: "A5 Landscape (210×148mm) or 8×5 inch" },
-  { key: "a4", label: "A4 Print", desc: "Standard A4 page, no image, full calendar", size: "A4 (210×297mm)" },
-  { key: "a3", label: "A3 Poster", desc: "Large poster with image and calendar", size: "A3 (297×420mm)" },
+const CALENDAR_TYPES: { key: CalendarType; label: string; desc: string; size: string; imageSize: string; imageRatio: string }[] = [
+  { key: "wall", label: "Wall Calendar", desc: "Portrait, image on top, calendar below", size: "A3 (297×420mm) or 12×18 inch", imageSize: "2480 × 1600 px", imageRatio: "3:2 landscape" },
+  { key: "table", label: "Table Calendar", desc: "Landscape, compact, tent-fold", size: "A5 Landscape (210×148mm) or 8×5 inch", imageSize: "1748 × 760 px", imageRatio: "2.3:1 wide landscape" },
+  { key: "a4", label: "A4 Print", desc: "Standard A4 page, no image, full calendar", size: "A4 (210×297mm)", imageSize: "No image", imageRatio: "—" },
+  { key: "a3", label: "A3 Poster", desc: "Large poster with image and calendar", size: "A3 (297×420mm)", imageSize: "2480 × 1470 px", imageRatio: "5:3 landscape" },
 ];
 
 export default function PrintCalendarPage() {
@@ -140,7 +140,8 @@ export default function PrintCalendarPage() {
               >
                 <div className={`text-sm font-semibold ${calendarType === t.key ? "text-orange-400" : "text-gray-300"}`}>{t.label}</div>
                 <div className="text-[10px] text-gray-500 mt-1">{t.desc}</div>
-                <div className="text-[10px] text-gray-600 mt-0.5">Size: {t.size}</div>
+                <div className="text-[10px] text-gray-600 mt-0.5">Paper: {t.size}</div>
+                <div className="text-[10px] text-gray-600">Image: {t.imageSize}</div>
               </button>
             ))}
           </div>
@@ -161,6 +162,13 @@ export default function PrintCalendarPage() {
             </button>
           </div>
 
+          {showImages && (
+            <div className="mb-3 rounded-lg bg-gray-800 px-3 py-2 text-xs">
+              <span className="text-orange-400 font-semibold">Recommended image size for {currentTypeInfo.label}:</span>{" "}
+              <span className="text-gray-300">{currentTypeInfo.imageSize} ({currentTypeInfo.imageRatio})</span>
+              <span className="text-gray-500 ml-2">— Use landscape images. Images will be scaled to fit width, cropped from center if aspect ratio differs.</span>
+            </div>
+          )}
           {showImages && (
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
               {MONTHS.map((m, i) => (
@@ -318,10 +326,12 @@ export default function PrintCalendarPage() {
           overflow: hidden;
           border-radius: 8px 8px 0 0;
           margin-bottom: 8px;
+          background: #f5f0e8;
         }
         .cal-image img {
           width: 100%;
-          object-fit: cover;
+          object-fit: contain;
+          object-position: center;
           display: block;
         }
 
