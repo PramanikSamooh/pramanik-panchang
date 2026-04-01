@@ -26,24 +26,53 @@ export interface LocationConfig {
   tz: number; // timezone offset in minutes (IST = 330)
 }
 
+/**
+ * Generate panchang for a date range (startMonth/startYear to endMonth/endYear).
+ * Months are 0-indexed (0=Jan, 11=Dec). Can span across years (e.g., May 2026 to April 2027).
+ */
+export async function generateRangePanchang(
+  startMonth: number, startYear: number,
+  endMonth: number, endYear: number,
+  events: JainEvent[],
+  location: LocationConfig = { lat: 23.1765, lng: 75.7885, tz: 330 },
+  onProgress?: (done: number, total: number) => void
+): Promise<PanchangDay[]> {
+  const startDate = new Date(startYear, startMonth, 1);
+  const endDate = new Date(endYear, endMonth + 1, 0); // last day of end month
+  const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+
+  return generatePanchangForRange(startDate, totalDays, events, location, onProgress);
+}
+
 export async function generateYearPanchang(
   year: number,
   events: JainEvent[],
   location: LocationConfig = { lat: 23.1765, lng: 75.7885, tz: 330 },
   onProgress?: (done: number, total: number) => void
 ): Promise<PanchangDay[]> {
+  const startDate = new Date(year, 0, 1);
+  const totalDays = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 366 : 365;
+
+  return generatePanchangForRange(startDate, totalDays, events, location, onProgress);
+}
+
+async function generatePanchangForRange(
+  startDate: Date,
+  totalDays: number,
+  events: JainEvent[],
+  location: LocationConfig,
+  onProgress?: (done: number, total: number) => void
+): Promise<PanchangDay[]> {
   const { getPanchangam, getUdayaTithiInfo } = await import("@ishubhamx/panchangam-js");
   const { Observer } = await import("@ishubhamx/panchangam-js");
 
   const observer = new Observer(location.lat, location.lng, 0);
-
-  const totalDays = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 366 : 365;
   const activeEvents = events.filter((e) => e.isActive);
   let diwaliDate: Date | null = null;
   const allDays: PanchangDay[] = [];
 
   for (let i = 0; i < totalDays; i++) {
-    const date = new Date(year, 0, 1 + i);
+    const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
     const dateStr = formatDateStr(date);
     const dayOfWeek = date.getDay();
 
@@ -100,7 +129,7 @@ export async function generateYearPanchang(
     }
 
     // Match events (tithi rules + Gregorian overrides)
-    const todayEvents = matchEventsForDate(dateStr, year, hinduMonthEn, paksha, tithiInPaksha, activeEvents);
+    const todayEvents = matchEventsForDate(dateStr, date.getFullYear(), hinduMonthEn, paksha, tithiInPaksha, activeEvents);
 
     // VNS date string
     const pakshaLabelHi = paksha === "Shukla" ? "शुक्ल" : "कृष्ण";
@@ -154,7 +183,7 @@ export async function generateYearPanchang(
 
         // Match events for the skipped tithi and merge into previous day
         const paksha = prev.tithi.pakshaEn.includes("Shukla") ? "Shukla" : "Krishna";
-        const skippedEvents = matchEventsForDate(prev.date, year, prev.hinduMonth.en, paksha, skippedNum, activeEvents);
+        const skippedEvents = matchEventsForDate(prev.date, new Date(prev.date).getFullYear(), prev.hinduMonth.en, paksha, skippedNum, activeEvents);
         if (skippedEvents.length > 0) {
           allDays[i - 1].todayEvents = [...allDays[i - 1].todayEvents, ...skippedEvents];
         }
@@ -179,16 +208,20 @@ export async function generateYearPanchang(
     }
   }
 
-  // Set VNS year
-  if (!diwaliDate) {
-    const approx: Record<number, string> = {
-      2025: "2025-10-20", 2026: "2026-11-08", 2027: "2027-10-29",
-      2028: "2028-10-17", 2029: "2029-11-05", 2030: "2030-10-26",
-    };
-    diwaliDate = approx[year] ? new Date(approx[year]) : new Date(year, 9, 25);
-  }
+  // Set VNS year — handle date ranges spanning multiple years
+  const approxDiwali: Record<number, string> = {
+    2024: "2024-11-01", 2025: "2025-10-20", 2026: "2026-11-08", 2027: "2027-10-29",
+    2028: "2028-10-17", 2029: "2029-11-05", 2030: "2030-10-26",
+  };
   for (const day of allDays) {
-    day.vnsYear = new Date(day.date) >= diwaliDate ? year + 527 : year + 526;
+    const d = new Date(day.date);
+    const yr = d.getFullYear();
+    // Use detected Diwali if in same year, else use approx
+    let diwali = diwaliDate && diwaliDate.getFullYear() === yr ? diwaliDate : null;
+    if (!diwali) {
+      diwali = approxDiwali[yr] ? new Date(approxDiwali[yr]) : new Date(yr, 9, 25);
+    }
+    day.vnsYear = d >= diwali ? yr + 527 : yr + 526;
   }
 
   // Second pass: fill upcoming events (next 30 days)

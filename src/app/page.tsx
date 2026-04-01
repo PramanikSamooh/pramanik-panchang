@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { generateYearPanchang } from "@/lib/panchang-engine";
+import { generateYearPanchang, generateRangePanchang } from "@/lib/panchang-engine";
 import { getAllJainEvents } from "@/data/jain-events";
 import type { PanchangDay, EventSummary } from "@/lib/types";
+
+type GenMode = "year" | "range";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -23,8 +25,12 @@ const LOCATIONS = [
 ];
 
 export default function Home() {
+  const [genMode, setGenMode] = useState<GenMode>("year");
   const [year, setYear] = useState(new Date().getFullYear());
-  const [locationIdx, setLocationIdx] = useState(0); // Ujjain default
+  const [startMonth, setStartMonth] = useState(new Date().getMonth());
+  const [startYear, setStartYear] = useState(new Date().getFullYear());
+  const [rangeMonths, setRangeMonths] = useState(12); // how many months
+  const [locationIdx, setLocationIdx] = useState(0);
   const [customLat, setCustomLat] = useState("23.1765");
   const [customLng, setCustomLng] = useState("75.7885");
   const [customTz, setCustomTz] = useState("330");
@@ -38,10 +44,8 @@ export default function Home() {
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true);
-    setProgress({ done: 0, total: 365 });
     setPanchangData([]);
 
-    // Use events from localStorage (includes user edits from /events page) or defaults
     let events;
     try {
       const saved = localStorage.getItem("pramanik_jain_events");
@@ -54,16 +58,29 @@ export default function Home() {
     const lat = loc.name === "Custom" ? parseFloat(customLat) : loc.lat;
     const lng = loc.name === "Custom" ? parseFloat(customLng) : loc.lng;
     const tz = loc.name === "Custom" ? parseInt(customTz) : loc.tz;
+    const locConfig = { lat, lng, tz };
 
-    const data = await generateYearPanchang(year, events, { lat, lng, tz }, (done, total) => {
-      setProgress({ done, total });
-    });
+    let data: PanchangDay[];
+    if (genMode === "range") {
+      // Calculate end month/year from start + rangeMonths
+      let endMonth = startMonth + rangeMonths - 1;
+      let endYear = startYear;
+      while (endMonth > 11) { endMonth -= 12; endYear++; }
+      setProgress({ done: 0, total: rangeMonths * 30 });
+      data = await generateRangePanchang(startMonth, startYear, endMonth, endYear, events, locConfig, (done, total) => {
+        setProgress({ done, total });
+      });
+    } else {
+      setProgress({ done: 0, total: 365 });
+      data = await generateYearPanchang(year, events, locConfig, (done, total) => {
+        setProgress({ done, total });
+      });
+    }
 
     setPanchangData(data);
-    // Save for print calendar page
     localStorage.setItem("pramanik_panchang_data", JSON.stringify(data));
     setGenerating(false);
-  }, [year]);
+  }, [genMode, year, startMonth, startYear, rangeMonths, locationIdx, customLat, customLng, customTz]);
 
   const handleDownloadJSON = () => {
     const blob = new Blob([JSON.stringify(panchangData, null, 2)], { type: "application/json" });
@@ -144,60 +161,98 @@ export default function Home() {
       </div>
 
       {/* Generate Controls */}
-      <div className="flex items-end gap-4 rounded-xl border border-gray-800 bg-gray-900 p-6">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-300">Year</label>
-          <select
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
-            className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none"
-          >
-            {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+      <div className="rounded-xl border border-gray-800 bg-gray-900 p-6 space-y-4">
+        {/* Mode Toggle */}
+        <div className="flex gap-2">
+          <button onClick={() => setGenMode("year")}
+            className={`rounded-lg px-4 py-2 text-sm font-medium ${genMode === "year" ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400 border border-gray-700"}`}>
+            Full Year
+          </button>
+          <button onClick={() => setGenMode("range")}
+            className={`rounded-lg px-4 py-2 text-sm font-medium ${genMode === "range" ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400 border border-gray-700"}`}>
+            Custom Range
+          </button>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-300">Location</label>
-          <select
-            value={locationIdx}
-            onChange={(e) => setLocationIdx(parseInt(e.target.value))}
-            className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none"
-          >
-            {LOCATIONS.map((loc, i) => (
-              <option key={loc.name} value={i}>{loc.name}</option>
-            ))}
-          </select>
-        </div>
+        <div className="flex items-end gap-4 flex-wrap">
+          {genMode === "year" ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-300">Year</label>
+              <select value={year} onChange={(e) => setYear(parseInt(e.target.value))}
+                className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
+                {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Start Month</label>
+                <select value={startMonth} onChange={(e) => setStartMonth(parseInt(e.target.value))}
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
+                  {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Start Year</label>
+                <select value={startYear} onChange={(e) => setStartYear(parseInt(e.target.value))}
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
+                  {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Duration</label>
+                <select value={rangeMonths} onChange={(e) => setRangeMonths(parseInt(e.target.value))}
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
+                  {[1, 2, 3, 4, 6, 12].map((n) => (
+                    <option key={n} value={n}>{n} month{n > 1 ? "s" : ""}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="text-xs text-gray-500 pb-2">
+                {MONTHS[startMonth]} {startYear} → {MONTHS[(startMonth + rangeMonths - 1) % 12]} {startYear + Math.floor((startMonth + rangeMonths - 1) / 12)}
+              </div>
+            </>
+          )}
 
-        {LOCATIONS[locationIdx].name === "Custom" && (
-          <div className="flex gap-2">
-            <div>
-              <label className="mb-1 block text-[10px] text-gray-500">Latitude</label>
-              <input type="text" value={customLat} onChange={(e) => setCustomLat(e.target.value)}
-                className="w-24 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] text-gray-500">Longitude</label>
-              <input type="text" value={customLng} onChange={(e) => setCustomLng(e.target.value)}
-                className="w-24 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] text-gray-500">TZ (min)</label>
-              <input type="text" value={customTz} onChange={(e) => setCustomTz(e.target.value)}
-                className="w-20 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
-            </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-300">Location</label>
+            <select value={locationIdx} onChange={(e) => setLocationIdx(parseInt(e.target.value))}
+              className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
+              {LOCATIONS.map((loc, i) => (
+                <option key={loc.name} value={i}>{loc.name}</option>
+              ))}
+            </select>
           </div>
-        )}
 
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
-        >
-          {generating ? `Generating... ${progress.done}/${progress.total}` : "Generate Panchang"}
-        </button>
+          {LOCATIONS[locationIdx].name === "Custom" && (
+            <div className="flex gap-2">
+              <div>
+                <label className="mb-1 block text-[10px] text-gray-500">Lat</label>
+                <input type="text" value={customLat} onChange={(e) => setCustomLat(e.target.value)}
+                  className="w-20 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] text-gray-500">Lng</label>
+                <input type="text" value={customLng} onChange={(e) => setCustomLng(e.target.value)}
+                  className="w-20 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] text-gray-500">TZ</label>
+                <input type="text" value={customTz} onChange={(e) => setCustomTz(e.target.value)}
+                  className="w-16 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
+              </div>
+            </div>
+          )}
+
+          <button onClick={handleGenerate} disabled={generating}
+            className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50">
+            {generating ? `Generating... ${progress.done}/${progress.total}` : "Generate Panchang"}
+          </button>
+        </div>{/* end flex items-end */}
 
         {generating && (
           <div className="flex-1">
