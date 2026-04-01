@@ -16,139 +16,211 @@ const MONTHS_HI = [
 const DAYS_HI = ["रवि", "सोम", "मंगल", "बुध", "गुरु", "शुक्र", "शनि"];
 const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+type CalendarType = "wall" | "table" | "a4" | "a3";
+
+const CALENDAR_TYPES: { key: CalendarType; label: string; desc: string; size: string }[] = [
+  { key: "wall", label: "Wall Calendar", desc: "Portrait, image on top, calendar below", size: "A3 (297×420mm) or 12×18 inch" },
+  { key: "table", label: "Table Calendar", desc: "Landscape, compact, tent-fold", size: "A5 Landscape (210×148mm) or 8×5 inch" },
+  { key: "a4", label: "A4 Print", desc: "Standard A4 page, no image, full calendar", size: "A4 (210×297mm)" },
+  { key: "a3", label: "A3 Poster", desc: "Large poster with image and calendar", size: "A3 (297×420mm)" },
+];
+
 export default function PrintCalendarPage() {
   const [panchangData, setPanchangData] = useState<PanchangDay[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(0);
   const [year, setYear] = useState(new Date().getFullYear());
   const [loaded, setLoaded] = useState(false);
+
+  // Settings
+  const [calendarType, setCalendarType] = useState<CalendarType>("a4");
+  const [showImages, setShowImages] = useState(false);
+  const [monthImages, setMonthImages] = useState<Record<number, string>>({});
+
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load generated panchang from localStorage
     const saved = localStorage.getItem("pramanik_panchang_data");
     if (saved) {
       try {
         const data = JSON.parse(saved) as PanchangDay[];
         setPanchangData(data);
-        if (data.length > 0) {
-          setYear(parseInt(data[0].date.split("-")[0]));
-        }
+        if (data.length > 0) setYear(parseInt(data[0].date.split("-")[0]));
         setLoaded(true);
-      } catch {
-        setLoaded(true);
-      }
+      } catch { setLoaded(true); }
     } else {
       setLoaded(true);
     }
+    // Load saved images
+    const savedImages = localStorage.getItem("pramanik_calendar_images");
+    if (savedImages) {
+      try { setMonthImages(JSON.parse(savedImages)); } catch {}
+    }
   }, []);
 
-  const monthDays = panchangData.filter((d) => {
-    const m = parseInt(d.date.split("-")[1]) - 1;
-    return m === selectedMonth;
-  });
+  function handleImageUpload(monthIdx: number, file: File) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const url = e.target?.result as string;
+      const updated = { ...monthImages, [monthIdx]: url };
+      setMonthImages(updated);
+      localStorage.setItem("pramanik_calendar_images", JSON.stringify(updated));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeImage(monthIdx: number) {
+    const updated = { ...monthImages };
+    delete updated[monthIdx];
+    setMonthImages(updated);
+    localStorage.setItem("pramanik_calendar_images", JSON.stringify(updated));
+  }
+
+  const monthDays = panchangData.filter((d) => parseInt(d.date.split("-")[1]) - 1 === selectedMonth);
 
   // Build weeks grid
   const weeks: (PanchangDay | null)[][] = [];
   if (monthDays.length > 0) {
     const firstDate = new Date(monthDays[0].date);
-    const startDay = firstDate.getDay(); // 0=Sun
-
+    const startDay = firstDate.getDay();
     let currentWeek: (PanchangDay | null)[] = [];
-    // Pad start
-    for (let i = 0; i < startDay; i++) {
-      currentWeek.push(null);
-    }
+    for (let i = 0; i < startDay; i++) currentWeek.push(null);
     for (const day of monthDays) {
       currentWeek.push(day);
-      if (currentWeek.length === 7) {
-        weeks.push(currentWeek);
-        currentWeek = [];
-      }
+      if (currentWeek.length === 7) { weeks.push(currentWeek); currentWeek = []; }
     }
-    // Pad end
     if (currentWeek.length > 0) {
-      while (currentWeek.length < 7) {
-        currentWeek.push(null);
-      }
+      while (currentWeek.length < 7) currentWeek.push(null);
       weeks.push(currentWeek);
     }
   }
 
-  function handlePrint() {
-    window.print();
-  }
-
   if (!loaded) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent" />
-      </div>
-    );
+    return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent" /></div>;
   }
 
   if (panchangData.length === 0) {
     return (
       <div className="text-center py-20">
         <h2 className="text-xl font-bold text-orange-500 mb-2">No Panchang Data</h2>
-        <p className="text-gray-400 mb-4">Generate panchang data first from the home page, then come back here.</p>
-        <a href="/" className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">
-          Go to Generator
-        </a>
+        <p className="text-gray-400 mb-4">Generate panchang data first from the home page.</p>
+        <a href="/" className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">Go to Generator</a>
       </div>
     );
   }
 
+  const currentTypeInfo = CALENDAR_TYPES.find((t) => t.key === calendarType)!;
+  const isLandscape = calendarType === "table";
+  const hasImage = showImages && monthImages[selectedMonth];
+
   return (
     <>
-      {/* Screen controls (hidden in print) */}
-      <div className="no-print space-y-4 mb-6">
+      {/* ── Screen Controls (hidden in print) ── */}
+      <div className="no-print space-y-5 mb-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-orange-500">Print Calendar</h1>
-            <p className="mt-1 text-sm text-gray-400">Monthly calendar view — print or save as PDF</p>
+            <p className="mt-1 text-sm text-gray-400">Configure and print monthly calendars</p>
           </div>
-          <button
-            onClick={handlePrint}
-            className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700"
-          >
-            🖨️ Print / Save PDF
+          <button onClick={() => window.print()} className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">
+            Print / Save PDF
           </button>
         </div>
 
+        {/* Calendar Type */}
+        <div className="rounded-xl border border-gray-800 bg-gray-900 p-4">
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">Calendar Type</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {CALENDAR_TYPES.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setCalendarType(t.key)}
+                className={`rounded-lg border p-3 text-left ${
+                  calendarType === t.key ? "border-orange-500 bg-orange-500/10" : "border-gray-700 hover:border-gray-600"
+                }`}
+              >
+                <div className={`text-sm font-semibold ${calendarType === t.key ? "text-orange-400" : "text-gray-300"}`}>{t.label}</div>
+                <div className="text-[10px] text-gray-500 mt-1">{t.desc}</div>
+                <div className="text-[10px] text-gray-600 mt-0.5">Size: {t.size}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Image Toggle */}
+        <div className="rounded-xl border border-gray-800 bg-gray-900 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-300">Calendar Images</h3>
+              <p className="text-xs text-gray-500">Add images for each month (shown on top of calendar)</p>
+            </div>
+            <button
+              onClick={() => setShowImages(!showImages)}
+              className={`h-6 w-11 rounded-full transition-colors ${showImages ? "bg-green-500" : "bg-gray-600"}`}
+            >
+              <div className={`h-5 w-5 rounded-full bg-white transition-transform ${showImages ? "translate-x-5.5" : "translate-x-0.5"}`} />
+            </button>
+          </div>
+
+          {showImages && (
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+              {MONTHS.map((m, i) => (
+                <div key={m} className="text-center">
+                  <div className="text-[10px] text-gray-400 mb-1">{m}</div>
+                  {monthImages[i] ? (
+                    <div className="relative">
+                      <img src={monthImages[i]} alt={m} className="w-full h-16 object-cover rounded border border-gray-700" />
+                      <button
+                        onClick={() => removeImage(i)}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+                      >×</button>
+                    </div>
+                  ) : (
+                    <label className="block w-full h-16 rounded border border-dashed border-gray-700 flex items-center justify-center cursor-pointer hover:border-orange-500 text-[10px] text-gray-500">
+                      + Add
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImageUpload(i, file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Month Selector */}
         <div className="flex gap-2 flex-wrap">
           {MONTHS.map((m, i) => (
             <button
               key={m}
               onClick={() => setSelectedMonth(i)}
               className={`rounded-lg px-3 py-1.5 text-sm ${
-                selectedMonth === i
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-800 text-gray-400 hover:text-white border border-gray-700"
+                selectedMonth === i ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white border border-gray-700"
               }`}
             >
               {m}
             </button>
           ))}
         </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              for (let i = 0; i < 12; i++) {
-                // Print all months hint
-              }
-              handlePrint();
-            }}
-            className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-400 hover:text-orange-400 hover:border-orange-500"
-          >
-            Print This Month
-          </button>
-        </div>
       </div>
 
-      {/* Printable calendar */}
+      {/* ── Printable Calendar ── */}
       <div ref={printRef} className="print-area">
-        <div className="calendar-page">
+        <div className={`calendar-page cal-type-${calendarType}`}>
+
+          {/* Image (if enabled) */}
+          {hasImage && (
+            <div className="cal-image">
+              <img src={monthImages[selectedMonth]} alt={MONTHS[selectedMonth]} />
+            </div>
+          )}
+
           {/* Header */}
           <div className="cal-header">
             <div className="cal-title">
@@ -160,7 +232,7 @@ export default function PrintCalendarPage() {
             </div>
           </div>
 
-          {/* Day headers */}
+          {/* Calendar Grid */}
           <table className="cal-table">
             <thead>
               <tr>
@@ -221,8 +293,9 @@ export default function PrintCalendarPage() {
         </div>
       </div>
 
-      {/* Print styles */}
+      {/* ── Styles ── */}
       <style jsx global>{`
+        /* ═══ Print Rules ═══ */
         @media print {
           body { background: white !important; color: black !important; margin: 0; padding: 0; }
           .no-print { display: none !important; }
@@ -231,6 +304,7 @@ export default function PrintCalendarPage() {
           .print-area { display: block !important; }
         }
 
+        /* ═══ Common ═══ */
         .calendar-page {
           background: white;
           color: #1a1a1a;
@@ -239,167 +313,121 @@ export default function PrintCalendarPage() {
           font-family: 'Segoe UI', system-ui, sans-serif;
         }
 
-        .cal-header {
-          text-align: center;
-          margin-bottom: 16px;
-          border-bottom: 3px solid #E8730A;
-          padding-bottom: 12px;
+        .cal-image {
+          width: 100%;
+          overflow: hidden;
+          border-radius: 8px 8px 0 0;
+          margin-bottom: 8px;
+        }
+        .cal-image img {
+          width: 100%;
+          object-fit: cover;
+          display: block;
         }
 
+        .cal-header {
+          text-align: center;
+          margin-bottom: 12px;
+          border-bottom: 3px solid #E8730A;
+          padding-bottom: 8px;
+        }
         .cal-title {
           display: flex;
           justify-content: space-between;
           align-items: baseline;
-          margin-bottom: 4px;
+          margin-bottom: 2px;
         }
+        .cal-title-hi { font-size: 1.3rem; font-weight: 700; color: #E8730A; }
+        .cal-title-year { font-size: 0.8rem; color: #666; }
+        .cal-month { font-size: 1.5rem; font-weight: 700; color: #333; }
 
-        .cal-title-hi {
-          font-size: 1.4rem;
-          font-weight: 700;
-          color: #E8730A;
-        }
-
-        .cal-title-year {
-          font-size: 0.85rem;
-          color: #666;
-        }
-
-        .cal-month {
-          font-size: 1.6rem;
-          font-weight: 700;
-          color: #333;
-        }
-
-        .cal-table {
-          width: 100%;
-          border-collapse: collapse;
-          table-layout: fixed;
-        }
+        .cal-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
         .cal-day-header {
-          background: #E8730A;
-          color: white;
-          padding: 8px 4px;
-          text-align: center;
-          font-size: 0.85rem;
-          font-weight: 600;
+          background: #E8730A; color: white;
+          padding: 6px 3px; text-align: center;
+          font-size: 0.8rem; font-weight: 600;
         }
-
-        .cal-day-header.cal-sunday {
-          background: #C0392B;
-        }
-
-        .cal-day-en {
-          font-size: 0.65rem;
-          font-weight: 400;
-          opacity: 0.85;
-        }
+        .cal-day-header.cal-sunday { background: #C0392B; }
+        .cal-day-en { font-size: 0.6rem; font-weight: 400; opacity: 0.85; }
 
         .cal-cell {
-          border: 1px solid #ddd;
-          padding: 4px 5px;
-          vertical-align: top;
-          height: 95px;
-          font-size: 0.7rem;
+          border: 1px solid #ddd; padding: 3px 4px;
+          vertical-align: top; font-size: 0.65rem;
         }
+        .cal-cell.cal-empty { background: #f9f9f9; }
+        .cal-cell.cal-sunday { background: #fff5f5; }
+        .cal-cell.cal-event-day { background: #fffbeb; border-color: #E8730A; }
+        .cal-cell.cal-vrat { background: #f0fdf4; border-left: 3px solid #22C55E; }
+        .cal-cell.cal-vrat.cal-event-day { background: #f0fdf4; }
 
-        .cal-cell.cal-empty {
-          background: #f9f9f9;
-        }
-
-        .cal-cell.cal-sunday {
-          background: #fff5f5;
-        }
-
-        .cal-cell.cal-event-day {
-          background: #fffbeb;
-          border-color: #E8730A;
-        }
-
-        .cal-cell.cal-vrat {
-          background: #f0fdf4;
-          border-left: 3px solid #22C55E;
-        }
-
-        .cal-cell.cal-vrat.cal-event-day {
-          background: #f0fdf4;
-        }
-
-        .cal-date {
-          font-size: 1.1rem;
-          font-weight: 700;
-          color: #333;
-          line-height: 1;
-        }
-
-        .cal-sunday .cal-date {
-          color: #C0392B;
-        }
-
-        .cal-tithi {
-          font-size: 0.7rem;
-          color: #555;
-          margin-top: 2px;
-          font-weight: 500;
-        }
-
-        .cal-kshaya {
-          color: #D97706;
-          font-size: 0.6rem;
-        }
-
-        .cal-vriddhi {
-          color: #3B82F6;
-          font-size: 0.6rem;
-        }
-
-        .cal-paksha {
-          font-size: 0.6rem;
-          color: #888;
-        }
-
-        .cal-events {
-          margin-top: 2px;
-        }
-
+        .cal-date { font-size: 1rem; font-weight: 700; color: #333; line-height: 1; }
+        .cal-sunday .cal-date { color: #C0392B; }
+        .cal-tithi { font-size: 0.65rem; color: #555; margin-top: 1px; font-weight: 500; }
+        .cal-kshaya { color: #D97706; font-size: 0.55rem; }
+        .cal-vriddhi { color: #3B82F6; font-size: 0.55rem; }
+        .cal-paksha { font-size: 0.55rem; color: #888; }
+        .cal-events { margin-top: 1px; }
         .cal-event-name {
-          font-size: 0.55rem;
-          font-weight: 600;
-          line-height: 1.2;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          font-size: 0.5rem; font-weight: 600;
+          line-height: 1.15; overflow: hidden;
+          text-overflow: ellipsis; white-space: nowrap;
         }
-
-        .cal-event-name.cal-moksha {
-          font-weight: 700;
-          font-style: italic;
-        }
-
+        .cal-event-name.cal-moksha { font-weight: 700; font-style: italic; }
         .cal-footer {
-          text-align: center;
-          margin-top: 12px;
-          padding-top: 8px;
-          border-top: 1px solid #ddd;
-          font-size: 0.7rem;
-          color: #999;
+          text-align: center; margin-top: 8px; padding-top: 6px;
+          border-top: 1px solid #ddd; font-size: 0.65rem; color: #999;
         }
 
-        @media screen {
-          .calendar-page {
-            border: 1px solid #374151;
-            background: white;
-          }
-        }
-
+        /* ═══ Wall Calendar (A3 Portrait — image top, calendar bottom) ═══ */
+        .cal-type-wall .cal-image { height: 380px; }
+        .cal-type-wall .cal-image img { height: 380px; }
+        .cal-type-wall .cal-cell { height: 75px; }
         @media print {
-          .calendar-page {
-            border: none;
-            padding: 10px;
-          }
-          .cal-cell {
-            height: 90px;
-          }
+          .cal-type-wall { padding: 10px; }
+          .cal-type-wall .cal-image { height: 360px; }
+          @page { size: A3 portrait; margin: 8mm; }
+        }
+
+        /* ═══ Table Calendar (A5 Landscape — compact, tent-fold) ═══ */
+        .cal-type-table .cal-image { height: 180px; }
+        .cal-type-table .cal-image img { height: 180px; }
+        .cal-type-table .cal-cell { height: 55px; padding: 2px 3px; }
+        .cal-type-table .cal-date { font-size: 0.85rem; }
+        .cal-type-table .cal-tithi { font-size: 0.55rem; }
+        .cal-type-table .cal-paksha { font-size: 0.5rem; }
+        .cal-type-table .cal-event-name { font-size: 0.45rem; }
+        .cal-type-table .cal-header { margin-bottom: 6px; padding-bottom: 4px; }
+        .cal-type-table .cal-title-hi { font-size: 1rem; }
+        .cal-type-table .cal-month { font-size: 1.1rem; }
+        .cal-type-table .cal-footer { font-size: 0.5rem; margin-top: 4px; }
+        @media print {
+          .cal-type-table { padding: 6px; }
+          @page { size: A5 landscape; margin: 5mm; }
+        }
+
+        /* ═══ A4 Print (Standard — no image, full page calendar) ═══ */
+        .cal-type-a4 .cal-cell { height: 90px; }
+        @media print {
+          .cal-type-a4 { padding: 10px; }
+          @page { size: A4 portrait; margin: 8mm; }
+        }
+
+        /* ═══ A3 Poster (Large — image + calendar) ═══ */
+        .cal-type-a3 .cal-image { height: 350px; }
+        .cal-type-a3 .cal-image img { height: 350px; }
+        .cal-type-a3 .cal-cell { height: 85px; }
+        .cal-type-a3 .cal-date { font-size: 1.2rem; }
+        .cal-type-a3 .cal-title-hi { font-size: 1.6rem; }
+        .cal-type-a3 .cal-month { font-size: 1.8rem; }
+        @media print {
+          .cal-type-a3 { padding: 12px; }
+          @page { size: A3 portrait; margin: 8mm; }
+        }
+
+        /* ═══ Screen preview border ═══ */
+        @media screen {
+          .calendar-page { border: 1px solid #374151; }
         }
       `}</style>
     </>
