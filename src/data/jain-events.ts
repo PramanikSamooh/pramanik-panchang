@@ -2,7 +2,7 @@ import { TIRTHANKARAS } from "./tirthankaras";
 
 export interface JainEvent {
   id: string;
-  category: "panch_kalyanak" | "jain_parv";
+  category: "panch_kalyanak" | "jain_parv" | "national";
   tirthankaraNumber: number | null;
   kalyanakType: string | null; // garbh|janma|tap|gyan|moksha
   nameHi: string;
@@ -13,6 +13,8 @@ export interface JainEvent {
   colorTheme: string;
   isActive: boolean;
   gregorianOverrides?: Record<string, string>;
+  // Fixed Gregorian date (MM-DD) — for national holidays etc.
+  fixedDate?: string; // e.g., "01-26" for Jan 26
 }
 
 export const KALYANAK_TYPES = [
@@ -409,8 +411,31 @@ const JAIN_PARV: JainEvent[] = [
     hinduMonth: "Ashwin", hinduPaksha: "Shukla", hinduTithi: 1,
     colorTheme: "#9370DB", isActive: true,
   },
-  // Das Lakshan (3 months × 10 days + start/end markers)
+  // Das Lakshan (3 months × 10 days + start markers)
   ...generateDasLakshan(),
+
+  // ── National Holidays (fixed Gregorian dates) ──
+  {
+    id: "republic-day",
+    category: "national", tirthankaraNumber: null, kalyanakType: null,
+    nameHi: "गणतंत्र दिवस", nameEn: "Republic Day",
+    hinduMonth: "", hinduPaksha: "", hinduTithi: 0,
+    colorTheme: "#1E88E5", isActive: true, fixedDate: "01-26",
+  },
+  {
+    id: "independence-day",
+    category: "national", tirthankaraNumber: null, kalyanakType: null,
+    nameHi: "स्वतंत्रता दिवस", nameEn: "Independence Day",
+    hinduMonth: "", hinduPaksha: "", hinduTithi: 0,
+    colorTheme: "#E8730A", isActive: true, fixedDate: "08-15",
+  },
+  {
+    id: "gandhi-jayanti",
+    category: "national", tirthankaraNumber: null, kalyanakType: null,
+    nameHi: "गांधी जयंती", nameEn: "Gandhi Jayanti",
+    hinduMonth: "", hinduPaksha: "", hinduTithi: 0,
+    colorTheme: "#4CAF50", isActive: true, fixedDate: "10-02",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════

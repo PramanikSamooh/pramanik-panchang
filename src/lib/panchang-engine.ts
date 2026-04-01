@@ -257,8 +257,12 @@ function matchEventsForDate(
   for (const event of events) {
     let isMatch = false;
 
-    // Check Gregorian override first (takes priority)
-    if (event.gregorianOverrides && event.gregorianOverrides[yearStr] === dateStr) {
+    // Check fixed Gregorian date (e.g., "01-26" for Republic Day)
+    if (event.fixedDate && dateStr.endsWith(event.fixedDate)) {
+      isMatch = true;
+    }
+    // Check Gregorian override (takes priority over tithi)
+    else if (event.gregorianOverrides && event.gregorianOverrides[yearStr] === dateStr) {
       isMatch = true;
     }
     // Then check tithi rule

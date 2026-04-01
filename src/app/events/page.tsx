@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { getAllJainEvents, HINDU_MONTHS, getKalyanakTypes, type JainEvent } from "@/data/jain-events";
 import { TIRTHANKARAS } from "@/data/tirthankaras";
 
-type Filter = "all" | "panch_kalyanak" | "jain_parv";
+type Filter = "all" | "panch_kalyanak" | "jain_parv" | "national";
 
 const STORAGE_KEY = "pramanik_jain_events";
 
@@ -69,6 +69,7 @@ export default function EventsPage() {
 
   const parvCount = events.filter((e) => e.category === "jain_parv").length;
   const pkCount = events.filter((e) => e.category === "panch_kalyanak").length;
+  const nationalCount = events.filter((e) => e.category === "national").length;
   const withRules = events.filter((e) => e.hinduMonth && e.hinduTithi > 0).length;
 
   return (
@@ -93,7 +94,7 @@ export default function EventsPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex rounded-lg border border-gray-700 overflow-hidden">
-          {([["all", "All"], ["jain_parv", `Jain Parv (${parvCount})`], ["panch_kalyanak", `Panch Kalyanak (${pkCount})`]] as [Filter, string][]).map(([key, label]) => (
+          {([["all", "All"], ["jain_parv", `Jain Parv (${parvCount})`], ["panch_kalyanak", `Panch Kalyanak (${pkCount})`], ["national", `National (${nationalCount})`]] as [Filter, string][]).map(([key, label]) => (
             <button key={key} onClick={() => { setFilter(key); setSelectedTirthankara(-1); }}
               className={`px-4 py-2 text-sm ${filter === key ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}>
               {label}
@@ -152,12 +153,18 @@ export default function EventsPage() {
                     <div className="text-xs text-gray-500">{event.nameEn}</div>
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${event.category === "jain_parv" ? "bg-purple-500/20 text-purple-400" : "bg-orange-500/20 text-orange-400"}`}>
-                      {event.category === "jain_parv" ? "Jain Parv" : "Panch Kalyanak"}
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      event.category === "jain_parv" ? "bg-purple-500/20 text-purple-400" :
+                      event.category === "national" ? "bg-blue-500/20 text-blue-400" :
+                      "bg-orange-500/20 text-orange-400"
+                    }`}>
+                      {event.category === "jain_parv" ? "Jain Parv" : event.category === "national" ? "National" : "Panch Kalyanak"}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-xs">
-                    {event.hinduMonth && event.hinduTithi > 0 ? (
+                    {event.fixedDate ? (
+                      <span className="text-blue-400">Fixed: {event.fixedDate} (every year)</span>
+                    ) : event.hinduMonth && event.hinduTithi > 0 ? (
                       <span className="text-green-400">{monthHi} {pakshaHi} {event.hinduTithi}</span>
                     ) : (
                       <span className="text-yellow-500">No rule — add manually</span>
