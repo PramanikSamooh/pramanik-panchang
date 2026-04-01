@@ -16,12 +16,13 @@ const MONTHS_HI = [
 const DAYS_HI = ["रवि", "सोम", "मंगल", "बुध", "गुरु", "शुक्र", "शनि"];
 const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-type CalendarType = "wall" | "table" | "a4" | "a3";
+type CalendarType = "wall" | "table" | "a4" | "a4img" | "a3";
 
 const CALENDAR_TYPES: { key: CalendarType; label: string; desc: string; size: string; imageSize: string; imageRatio: string }[] = [
   { key: "wall", label: "Wall Calendar", desc: "Portrait, image on top, calendar below", size: "A3 (297×420mm) or 12×18 inch", imageSize: "2480 × 1600 px", imageRatio: "3:2 landscape" },
   { key: "table", label: "Table Calendar", desc: "Landscape, compact, tent-fold", size: "A5 Landscape (210×148mm) or 8×5 inch", imageSize: "1748 × 760 px", imageRatio: "2.3:1 wide landscape" },
-  { key: "a4", label: "A4 Print", desc: "Standard A4 page, no image, full calendar", size: "A4 (210×297mm)", imageSize: "No image", imageRatio: "—" },
+  { key: "a4", label: "A4 Calendar", desc: "Standard A4, no image, large fonts", size: "A4 (210×297mm)", imageSize: "No image", imageRatio: "—" },
+  { key: "a4img", label: "A4 with Image", desc: "A4 page with image on top", size: "A4 (210×297mm)", imageSize: "1748 × 800 px", imageRatio: "2.2:1 landscape" },
   { key: "a3", label: "A3 Poster", desc: "Large poster with image and calendar", size: "A3 (297×420mm)", imageSize: "2480 × 1470 px", imageRatio: "5:3 landscape" },
 ];
 
@@ -466,24 +467,42 @@ export default function PrintCalendarPage() {
           @page { size: A5 landscape; margin: 5mm; }
         }
 
-        /* ═══ A4 Print (Standard — no image, full page calendar) ═══ */
+        /* ═══ A4 Calendar (no image, large fonts, full page) ═══ */
         .cal-type-a4 .cal-image { display: none; }
-        .cal-type-a4 .cal-table-wrapper { margin-top: 0; flex: 1; display: flex; flex-direction: column; }
-        .cal-type-a4 .cal-table { flex: 1; }
-        .cal-type-a4 .cal-table tbody { height: 100%; }
-        .cal-type-a4 .cal-table tbody tr { height: 16.6%; } /* ~6 rows fill page */
-        .cal-type-a4 .cal-cell { height: auto; min-height: 100px; }
-        .cal-type-a4 { padding-top: 15px; }
-        .cal-type-a4 .cal-date { font-size: 1.3rem; }
-        .cal-type-a4 .cal-tithi { font-size: 0.75rem; }
-        .cal-type-a4 .cal-paksha { font-size: 0.65rem; }
-        .cal-type-a4 .cal-event-name { font-size: 0.6rem; }
-        .cal-type-a4 .cal-title-hi { font-size: 1.5rem; }
-        .cal-type-a4 .cal-month { font-size: 1.7rem; }
+        .cal-type-a4 .cal-table-wrapper { margin-top: 0; }
+        .cal-type-a4 { padding: 15px; padding-top: 12px; }
+        .cal-type-a4 .cal-date { font-size: 1.6rem; font-weight: 800; }
+        .cal-type-a4 .cal-tithi { font-size: 0.85rem; }
+        .cal-type-a4 .cal-paksha { font-size: 0.7rem; }
+        .cal-type-a4 .cal-event-name { font-size: 0.65rem; }
+        .cal-type-a4 .cal-day-header { padding: 8px 4px; font-size: 0.9rem; }
+        .cal-type-a4 .cal-day-en { font-size: 0.7rem; }
+        .cal-type-a4 .cal-title-hi { font-size: 1.6rem; }
+        .cal-type-a4 .cal-month { font-size: 1.8rem; }
+        .cal-type-a4 .cal-header { margin-bottom: 10px; }
+        .cal-type-a4 .cal-cell { height: auto; padding: 5px 6px; }
+        .cal-type-a4 .cal-kshaya { font-size: 0.65rem; }
+        .cal-type-a4 .cal-vriddhi { font-size: 0.65rem; }
         @media print {
-          .cal-type-a4 { padding: 8px; padding-top: 10px; height: 100vh; }
-          .cal-type-a4 .cal-table tbody tr { height: auto; }
-          .cal-type-a4 .cal-cell { min-height: 120px; }
+          .cal-type-a4 { padding: 8px; }
+          @page { size: A4 portrait; margin: 6mm; }
+        }
+
+        /* ═══ A4 with Image ═══ */
+        .cal-type-a4img .cal-image { height: 280px; }
+        .cal-type-a4img .cal-image img { height: 280px; }
+        .cal-type-a4img .cal-cell { height: 60px; padding: 3px 4px; }
+        .cal-type-a4img .cal-date { font-size: 1rem; }
+        .cal-type-a4img .cal-tithi { font-size: 0.6rem; }
+        .cal-type-a4img .cal-paksha { font-size: 0.5rem; }
+        .cal-type-a4img .cal-event-name { font-size: 0.45rem; }
+        .cal-type-a4img .cal-header { margin-bottom: 6px; padding-bottom: 4px; }
+        .cal-type-a4img .cal-title-hi { font-size: 1.1rem; }
+        .cal-type-a4img .cal-month { font-size: 1.2rem; }
+        .cal-type-a4img .cal-footer { font-size: 0.5rem; margin-top: 4px; }
+        @media print {
+          .cal-type-a4img { padding: 8px; }
+          .cal-type-a4img .cal-image { height: 260px; }
           @page { size: A4 portrait; margin: 6mm; }
         }
 
