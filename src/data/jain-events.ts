@@ -92,25 +92,21 @@ function pk(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PANCH KALYANAK DATA — from Uttar Puran (authoritative source)
-// Sud = Shukla, Vad = Krishna
-// 30 in Vad = Amavasya, 15 in Sud = Purnima
+// PANCH KALYANAK DATA — Source: parastvchannel.com (official)
 // ═══════════════════════════════════════════════════════════════
 
-// Data source: Uttar Puran (Digambar authoritative)
-// Sud = Shukla, Vad = Krishna, 30 in Vad = Amavasya (Krishna 15)
 const PANCH_KALYANAK: JainEvent[] = [
-  // 1. Rushabhdev (Adinath)
-  pk(1, "garbh",  "Jeth",     "Krishna", 2),
-  pk(1, "janma",  "Faagan",   "Krishna", 9),
-  pk(1, "tap",    "Faagan",   "Krishna", 9),
-  pk(1, "gyan",   "Mahaa",    "Krishna", 11),
-  pk(1, "moksha", "Posh",     "Krishna", 14),
+  // 1. Aadinath (Rushabhdev)
+  pk(1, "garbh",  "Ashadhh",  "Krishna", 2),
+  pk(1, "janma",  "Chaitra",  "Krishna", 9),
+  pk(1, "tap",    "Chaitra",  "Krishna", 9),
+  pk(1, "gyan",   "Faagan",   "Krishna", 11),
+  pk(1, "moksha", "Mahaa",    "Krishna", 14),
 
   // 2. Ajitnath
-  pk(2, "garbh",  "Vaishakh", "Krishna", 15), // Vad-30 = Amavasya
+  pk(2, "garbh",  "Jeth",     "Krishna", 15), // Amavasya
   pk(2, "janma",  "Mahaa",    "Shukla", 10),
-  pk(2, "tap",    "Mahaa",    "Shukla", 9),
+  pk(2, "tap",    "Mahaa",    "Shukla", 10),
   pk(2, "gyan",   "Posh",     "Shukla", 11),
   pk(2, "moksha", "Chaitra",  "Shukla", 5),
 
@@ -118,155 +114,155 @@ const PANCH_KALYANAK: JainEvent[] = [
   pk(3, "garbh",  "Faagan",   "Shukla", 8),
   pk(3, "janma",  "Kartak",   "Shukla", 15), // Purnima
   pk(3, "tap",    "Magshar",  "Shukla", 15), // Purnima
-  pk(3, "gyan",   "Aaso",     "Krishna", 4),
+  pk(3, "gyan",   "Kartak",   "Krishna", 4),
   pk(3, "moksha", "Chaitra",  "Shukla", 6),
 
-  // 4. Abhinandan
+  // 4. Abhinandannath
   pk(4, "garbh",  "Vaishakh", "Shukla", 6),
   pk(4, "janma",  "Mahaa",    "Shukla", 12),
-  pk(4, "tap",    "Mahaa",    "Shukla", 14),
+  pk(4, "tap",    "Mahaa",    "Shukla", 12),
   pk(4, "gyan",   "Posh",     "Shukla", 14),
   pk(4, "moksha", "Vaishakh", "Shukla", 6),
 
   // 5. Sumatinath
   pk(5, "garbh",  "Shravan",  "Shukla", 2),
   pk(5, "janma",  "Chaitra",  "Shukla", 11),
-  pk(5, "tap",    "Vaishakh", "Shukla", 9),
+  pk(5, "tap",    "Chaitra",  "Shukla", 11),
   pk(5, "gyan",   "Chaitra",  "Shukla", 11),
   pk(5, "moksha", "Chaitra",  "Shukla", 11),
 
-  // 6. Padmaprabha
-  pk(6, "garbh",  "Posh",     "Krishna", 6),
-  pk(6, "janma",  "Aaso",     "Krishna", 13),
-  pk(6, "tap",    "Aaso",     "Krishna", 13),
+  // 6. Padmaprabh
+  pk(6, "garbh",  "Mahaa",    "Krishna", 6),
+  pk(6, "janma",  "Kartak",   "Shukla", 13),
+  pk(6, "tap",    "Kartak",   "Shukla", 13),
   pk(6, "gyan",   "Chaitra",  "Shukla", 15), // Purnima
-  pk(6, "moksha", "Mahaa",    "Krishna", 4),
+  pk(6, "moksha", "Faagan",   "Krishna", 4),
 
   // 7. Suparshvanath
   pk(7, "garbh",  "Bhadarvo", "Shukla", 6),
   pk(7, "janma",  "Jeth",     "Shukla", 12),
   pk(7, "tap",    "Jeth",     "Shukla", 12),
-  pk(7, "gyan",   "Mahaa",    "Krishna", 6),
-  pk(7, "moksha", "Mahaa",    "Krishna", 7),
+  pk(7, "gyan",   "Faagan",   "Krishna", 6),
+  pk(7, "moksha", "Faagan",   "Krishna", 7),
 
-  // 8. Chandraprabha
-  pk(8, "garbh",  "Faagan",   "Krishna", 5),
-  pk(8, "janma",  "Magshar",  "Krishna", 11),
-  pk(8, "tap",    "Magshar",  "Krishna", 11),
-  pk(8, "gyan",   "Mahaa",    "Krishna", 7),
-  pk(8, "moksha", "Mahaa",    "Krishna", 7),
+  // 8. Chandraprabh
+  pk(8, "garbh",  "Chaitra",  "Krishna", 5),
+  pk(8, "janma",  "Posh",     "Krishna", 11),
+  pk(8, "tap",    "Posh",     "Krishna", 11),
+  pk(8, "gyan",   "Faagan",   "Krishna", 7),
+  pk(8, "moksha", "Faagan",   "Shukla", 7),
 
   // 9. Pushpadant (Suvidhinath)
-  pk(9, "garbh",  "Mahaa",    "Krishna", 9),
+  pk(9, "garbh",  "Faagan",   "Krishna", 9),
   pk(9, "janma",  "Magshar",  "Shukla", 1),
   pk(9, "tap",    "Magshar",  "Shukla", 1),
   pk(9, "gyan",   "Kartak",   "Shukla", 2),
-  pk(9, "moksha", "Bhadarvo", "Shukla", 8),
+  pk(9, "moksha", "Aaso",     "Shukla", 8),
 
   // 10. Sheetalnath
-  pk(10, "garbh",  "Faagan",   "Krishna", 8),
-  pk(10, "janma",  "Posh",     "Krishna", 12),
-  pk(10, "tap",    "Posh",     "Krishna", 12),
-  pk(10, "gyan",   "Magshar",  "Krishna", 14),
+  pk(10, "garbh",  "Chaitra",  "Krishna", 8),
+  pk(10, "janma",  "Mahaa",    "Krishna", 12),
+  pk(10, "tap",    "Mahaa",    "Krishna", 12),
+  pk(10, "gyan",   "Posh",     "Krishna", 14),
   pk(10, "moksha", "Aaso",     "Shukla", 8),
 
   // 11. Shreyansnath
-  pk(11, "garbh",  "Vaishakh", "Krishna", 6),
-  pk(11, "janma",  "Mahaa",    "Krishna", 11),
-  pk(11, "tap",    "Mahaa",    "Krishna", 11),
-  pk(11, "gyan",   "Posh",     "Krishna", 15), // Vad-30 = Amavasya
+  pk(11, "garbh",  "Jeth",     "Krishna", 8),
+  pk(11, "janma",  "Faagan",   "Krishna", 11),
+  pk(11, "tap",    "Faagan",   "Krishna", 11),
+  pk(11, "gyan",   "Mahaa",    "Krishna", 15), // Amavasya
   pk(11, "moksha", "Shravan",  "Shukla", 15), // Purnima
 
   // 12. Vasupujya
-  pk(12, "garbh",  "Jeth",     "Krishna", 6),
-  pk(12, "janma",  "Mahaa",    "Krishna", 14),
-  pk(12, "tap",    "Mahaa",    "Krishna", 14),
-  pk(12, "gyan",   "Mahaa",    "Shukla", 2),
+  pk(12, "garbh",  "Ashadhh",  "Krishna", 6),
+  pk(12, "janma",  "Faagan",   "Krishna", 14),
+  pk(12, "tap",    "Faagan",   "Krishna", 14),
+  pk(12, "gyan",   "Bhadarvo", "Shukla", 2),
   pk(12, "moksha", "Bhadarvo", "Shukla", 14),
 
   // 13. Vimalnath
-  pk(13, "garbh",  "Vaishakh", "Krishna", 10),
+  pk(13, "garbh",  "Jeth",     "Krishna", 10),
   pk(13, "janma",  "Mahaa",    "Shukla", 4),
   pk(13, "tap",    "Mahaa",    "Shukla", 4),
   pk(13, "gyan",   "Mahaa",    "Shukla", 6),
-  pk(13, "moksha", "Jeth",     "Krishna", 8),
+  pk(13, "moksha", "Ashadhh",  "Krishna", 6),
 
   // 14. Anantnath
-  pk(14, "garbh",  "Aaso",     "Krishna", 1),
-  pk(14, "janma",  "Vaishakh", "Krishna", 12),
-  pk(14, "tap",    "Vaishakh", "Krishna", 12),
-  pk(14, "gyan",   "Faagan",   "Krishna", 15), // Vad-30 = Amavasya
-  pk(14, "moksha", "Faagan",   "Krishna", 15), // Vad-30 = Amavasya
+  pk(14, "garbh",  "Kartak",   "Krishna", 1),
+  pk(14, "janma",  "Jeth",     "Krishna", 12),
+  pk(14, "tap",    "Jeth",     "Krishna", 12),
+  pk(14, "gyan",   "Chaitra",  "Krishna", 15), // Amavasya
+  pk(14, "moksha", "Chaitra",  "Krishna", 15), // Amavasya
 
   // 15. Dharmnath
-  pk(15, "garbh",  "Chaitra",  "Krishna", 13),
+  pk(15, "garbh",  "Vaishakh", "Shukla", 8),
   pk(15, "janma",  "Mahaa",    "Shukla", 13),
   pk(15, "tap",    "Mahaa",    "Shukla", 13),
   pk(15, "gyan",   "Posh",     "Shukla", 15), // Purnima
   pk(15, "moksha", "Jeth",     "Shukla", 4),
 
   // 16. Shantinath
-  pk(16, "garbh",  "Shravan",  "Krishna", 7),
-  pk(16, "janma",  "Vaishakh", "Krishna", 14),
-  pk(16, "tap",    "Vaishakh", "Krishna", 14),
+  pk(16, "garbh",  "Bhadarvo", "Krishna", 7),
+  pk(16, "janma",  "Jeth",     "Krishna", 14),
+  pk(16, "tap",    "Jeth",     "Krishna", 14),
   pk(16, "gyan",   "Posh",     "Shukla", 10),
-  pk(16, "moksha", "Magshar",  "Krishna", 14),
+  pk(16, "moksha", "Jeth",     "Krishna", 14),
 
   // 17. Kunthunath
-  pk(17, "garbh",  "Ashadhh",  "Krishna", 10),
+  pk(17, "garbh",  "Shravan",  "Krishna", 10),
   pk(17, "janma",  "Vaishakh", "Shukla", 1),
   pk(17, "tap",    "Vaishakh", "Shukla", 1),
   pk(17, "gyan",   "Chaitra",  "Shukla", 3),
   pk(17, "moksha", "Vaishakh", "Shukla", 1),
 
-  // 18. Arahnath
-  pk(18, "garbh",  "Vaishakh", "Shukla", 3),
+  // 18. Arnath
+  pk(18, "garbh",  "Faagan",   "Shukla", 3),
   pk(18, "janma",  "Magshar",  "Shukla", 14),
   pk(18, "tap",    "Magshar",  "Shukla", 10),
   pk(18, "gyan",   "Kartak",   "Shukla", 12),
-  pk(18, "moksha", "Faagan",   "Krishna", 15), // Vad-30 = Amavasya
+  pk(18, "moksha", "Chaitra",  "Krishna", 15), // Amavasya
 
   // 19. Mallinath
   pk(19, "garbh",  "Chaitra",  "Shukla", 1),
   pk(19, "janma",  "Magshar",  "Shukla", 11),
   pk(19, "tap",    "Magshar",  "Shukla", 11),
-  pk(19, "gyan",   "Magshar",  "Krishna", 2),
+  pk(19, "gyan",   "Posh",     "Krishna", 2),
   pk(19, "moksha", "Faagan",   "Shukla", 5),
 
   // 20. Munisuvratnath
-  pk(20, "garbh",  "Ashadhh",  "Krishna", 2),
-  pk(20, "janma",  "Chaitra",  "Krishna", 10),
-  pk(20, "tap",    "Chaitra",  "Krishna", 10),
-  pk(20, "gyan",   "Chaitra",  "Krishna", 9),
-  pk(20, "moksha", "Mahaa",    "Krishna", 12),
+  pk(20, "garbh",  "Shravan",  "Krishna", 2),
+  pk(20, "janma",  "Vaishakh", "Krishna", 10),
+  pk(20, "tap",    "Vaishakh", "Krishna", 10),
+  pk(20, "gyan",   "Vaishakh", "Krishna", 9),
+  pk(20, "moksha", "Faagan",   "Krishna", 12),
 
   // 21. Naminath
-  pk(21, "garbh",  "Bhadarvo", "Krishna", 2),
-  pk(21, "janma",  "Jeth",     "Krishna", 10),
-  pk(21, "tap",    "Jeth",     "Krishna", 10),
+  pk(21, "garbh",  "Aaso",     "Krishna", 2),
+  pk(21, "janma",  "Ashadhh",  "Krishna", 10),
+  pk(21, "tap",    "Ashadhh",  "Krishna", 10),
   pk(21, "gyan",   "Magshar",  "Shukla", 11),
-  pk(21, "moksha", "Chaitra",  "Krishna", 14),
+  pk(21, "moksha", "Vaishakh", "Krishna", 14),
 
   // 22. Neminath
   pk(22, "garbh",  "Kartak",   "Shukla", 6),
   pk(22, "janma",  "Shravan",  "Shukla", 6),
   pk(22, "tap",    "Shravan",  "Shukla", 6),
   pk(22, "gyan",   "Aaso",     "Shukla", 1),
-  pk(22, "moksha", "Ashadhh",  "Shukla", 7),
+  pk(22, "moksha", "Ashadhh",  "Shukla", 8),
 
   // 23. Parshvanath
-  pk(23, "garbh",  "Chaitra",  "Krishna", 2),
-  pk(23, "janma",  "Magshar",  "Krishna", 11),
-  pk(23, "tap",    "Magshar",  "Krishna", 11),
-  pk(23, "gyan",   "Faagan",   "Krishna", 4),
+  pk(23, "garbh",  "Vaishakh", "Krishna", 2),
+  pk(23, "janma",  "Posh",     "Krishna", 11),
+  pk(23, "tap",    "Posh",     "Krishna", 11),
+  pk(23, "gyan",   "Chaitra",  "Krishna", 4),
   pk(23, "moksha", "Shravan",  "Shukla", 7),
 
   // 24. Mahaveer
   pk(24, "garbh",  "Ashadhh",  "Shukla", 6),
   pk(24, "janma",  "Chaitra",  "Shukla", 13),
-  pk(24, "tap",    "Kartak",   "Krishna", 10),
+  pk(24, "tap",    "Magshar",  "Krishna", 10),
   pk(24, "gyan",   "Vaishakh", "Shukla", 10),
-  pk(24, "moksha", "Aaso",     "Krishna", 15), // Vad-30 = Amavasya
+  pk(24, "moksha", "Kartak",   "Krishna", 15), // Amavasya
 ];
 
 // ═══════════════════════════════════════════════════════════════
