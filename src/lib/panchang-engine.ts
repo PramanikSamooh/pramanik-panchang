@@ -18,8 +18,10 @@ function formatDateStr(date: Date): string {
 
 /**
  * Generate panchang data for an entire year using @ishubhamx/panchangam-js.
- * Uses Udaya Tithi (tithi at sunrise) for accurate festival date matching.
+ * Uses the Jain reckoning: tithi active at sunrise + 6 ghati (144 minutes).
  */
+const SIX_GHATI_MS = 144 * 60 * 1000;
+
 export interface LocationConfig {
   lat: number;
   lng: number;
@@ -84,7 +86,7 @@ async function generatePanchangForRange(
       continue;
     }
 
-    // Use Udaya Tithi (tithi at sunrise) — returns 1-30
+    // Jain reckoning: tithi active at sunrise + 6 ghati (144 min) — returns 1-30
     let udayaTithi = 1;
     let udayaPaksha = "Shukla";
     let tithiStart: Date | null = null;
@@ -92,7 +94,8 @@ async function generatePanchangForRange(
 
     if (pResult.sunrise) {
       try {
-        const udaya = getUdayaTithiInfo(date, pResult.sunrise, observer);
+        const jainRef = new Date(pResult.sunrise.getTime() + SIX_GHATI_MS);
+        const udaya = getUdayaTithiInfo(date, jainRef, observer);
         udayaTithi = udaya.tithi; // 1-30 (1-15 Shukla, 16-30 Krishna)
         udayaPaksha = udaya.paksha?.includes("Shukla") ? "Shukla" : "Krishna";
         tithiStart = udaya.tithiStart;
