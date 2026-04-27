@@ -136,50 +136,48 @@ export default function DailyPanchangPage({ params }: PageProps) {
           className="font-serif text-gray-900"
           style={{
             background: "linear-gradient(180deg, #fff8e7 0%, #fff2d4 100%)",
-            border: "8px double #b8860b",
+            border: "6px double #b8860b",
             borderRadius: 12,
-            padding: 16,
+            padding: 12,
             width: "100%",
             boxSizing: "border-box",
           }}
         >
-          {/* Banner */}
+          {/* Banner with date + city inline */}
           <div
             style={{
               background: "linear-gradient(180deg, #8b1a1a 0%, #6d1414 100%)",
               color: "#ffd700",
-              textAlign: "center",
-              padding: "10px 8px",
+              padding: "8px 12px",
               borderRadius: 6,
-              fontSize: 22,
-              fontWeight: "bold",
-              letterSpacing: 0.5,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
             }}
           >
-            ॥ तीर्थंकर वर्धमान जैन पंचांग दैनिक ॥
-          </div>
-
-          {/* Date + City + "Daily Panchang" caption */}
-          <div className="flex items-center justify-between" style={{ padding: "8px 4px" }}>
-            <div style={{ background: "#fff5e0", borderRadius: 6, padding: "4px 10px" }}>
-              <div style={{ fontSize: 14, color: "#8b1a1a", fontWeight: "bold" }}>📅 {formattedDate}</div>
-              <div style={{ fontSize: 11, color: "#666" }}>📍 {city.name}, India</div>
+            <div style={{ fontSize: 11, fontWeight: "bold", lineHeight: 1.2, color: "#ffd700" }}>
+              📅 {formattedDate}
+              <br />
+              📍 {city.name}
             </div>
-            <div
-              style={{
-                fontSize: 16,
-                color: "#8b1a1a",
-                fontWeight: "bold",
-                fontStyle: "italic",
-                fontFamily: "serif",
-              }}
-            >
-              ॥ Daily Panchang ॥
+            <div style={{ fontSize: 18, fontWeight: "bold", textAlign: "center", flex: 1, letterSpacing: 0.3 }}>
+              ॥ तीर्थंकर वर्धमान जैन पंचांग ॥
+              <div style={{ fontSize: 12, fontStyle: "italic", color: "#fff5b8", marginTop: 1 }}>
+                Daily Panchang
+              </div>
+            </div>
+            <div style={{ fontSize: 10, textAlign: "right", color: "#fff5b8" }}>
+              {day.varaHi}<br />
+              <span style={{ fontStyle: "italic" }}>{day.varaEn}</span>
             </div>
           </div>
 
-          {/* Two-column main panchang */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
+          {/* ★ EVENTS HERO ★ — most prominent block on the card */}
+          <EventsHero day={day} />
+
+          {/* Two-column main panchang (compact) */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
             {/* Left — पंचांग */}
             <div style={{ border: "1px solid #b8860b", borderRadius: 6, background: "#fff8e0" }}>
               <div
@@ -187,27 +185,23 @@ export default function DailyPanchangPage({ params }: PageProps) {
                   background: "#8b1a1a",
                   color: "#ffd700",
                   textAlign: "center",
-                  padding: "4px 0",
+                  padding: "3px 0",
                   fontWeight: "bold",
-                  fontSize: 13,
+                  fontSize: 12,
                   borderTopLeftRadius: 5,
                   borderTopRightRadius: 5,
                 }}
               >
                 ☀ पंचांग ☀
               </div>
-              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
                 <tbody>
                   <KV label="तिथि" value={day.tithi.nameHi} time={day.tithi.endTime} />
+                  <KV label="पक्ष" value={day.tithi.pakshaHi.replace(" पक्ष", "") + (day.masaIsAdhika ? " (अधिक)" : "")} />
                   <KV label="नक्षत्र" value={day.nakshatra?.nameHi} time={day.nakshatra?.endTime} />
-                  <KV
-                    label="करण"
-                    value={day.karana?.nameHi}
-                    time={day.karana?.endTime}
-                  />
-                  <KV label="पक्ष" value={day.tithi.pakshaHi.replace(" पक्ष", "")} />
                   <KV label="योग" value={day.yoga?.nameHi} time={day.yoga?.endTime} />
-                  <KV label="वार" value={day.varaHi} />
+                  <KV label="करण" value={day.karana?.nameHi} time={day.karana?.endTime} />
+                  <KV label="आनंदादि" value={day.anandadiYoga?.nameHi} />
                 </tbody>
               </table>
             </div>
@@ -219,16 +213,16 @@ export default function DailyPanchangPage({ params }: PageProps) {
                   background: "#8b1a1a",
                   color: "#ffd700",
                   textAlign: "center",
-                  padding: "4px 0",
+                  padding: "3px 0",
                   fontWeight: "bold",
-                  fontSize: 13,
+                  fontSize: 12,
                   borderTopLeftRadius: 5,
                   borderTopRightRadius: 5,
                 }}
               >
-                ☀ सूर्य एवं चन्द्र गणना ☀
+                ☀ सूर्य एवं चन्द्र ☀
               </div>
-              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
                 <tbody>
                   <KV label="सूर्योदय" value={day.sunTimes?.sunrise} />
                   <KV label="सूर्यास्त" value={day.sunTimes?.sunset} />
@@ -236,54 +230,39 @@ export default function DailyPanchangPage({ params }: PageProps) {
                   <KV label="चन्द्रास्त" value={day.sunTimes?.moonset} />
                   <KV label="चन्द्र राशि" value={day.moonRashi?.nameHi} />
                   <KV label="सूर्य नक्षत्र" value={day.sunNakshatra?.nameHi} />
-                  <KV label="ऋतु" value={day.ritu?.hi} />
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Samvat band */}
+          {/* Compact samvat strip — single horizontal band */}
           <div
             style={{
               border: "1px solid #b8860b",
               borderRadius: 6,
               background: "#fff8e0",
-              padding: "6px 10px",
+              padding: "5px 8px",
               marginTop: 6,
-              fontSize: 11,
+              fontSize: 10.5,
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 4,
+              gridTemplateColumns: "1fr 1fr 1fr 1fr",
+              gap: 6,
+              lineHeight: 1.4,
             }}
           >
-            <div>
-              <strong>वीर निर्वाण संवत्</strong>: {day.samvats?.virNirvan ?? "-"}
-            </div>
-            <div>
-              <strong>विक्रम संवत्</strong>: {day.samvats?.vikram ?? "-"}
-            </div>
-            <div>
-              <strong>शक संवत्</strong>: {day.samvats?.shaka ?? "-"}
-            </div>
-            <div>
-              <strong>महावीर जन्म संवत्</strong>: {day.samvats?.mahavirJanma ?? "-"}
-            </div>
-            <div>
-              <strong>दिवस अवधि</strong>: {day.dayDuration ?? "-"}
-            </div>
-            <div>
-              <strong>अयन</strong>: {day.ayana?.hi ?? "-"}
-            </div>
-            <div style={{ gridColumn: "span 3" }}>
-              <strong>माह अमान्त</strong>: {day.hinduMonthAmanta?.hi}
-              {"   "}
-              <strong>माह पूर्णिमान्त</strong>: {day.hinduMonthPurnimanta?.hi}
-              {day.masaIsAdhika ? " (अधिक)" : ""}
-            </div>
+            <div><strong style={{ color: "#8b1a1a" }}>वीर निर्वाण सं.</strong><br />{day.samvats?.virNirvan ?? "-"}</div>
+            <div><strong style={{ color: "#8b1a1a" }}>म. जन्म सं.</strong><br />{day.samvats?.mahavirJanma ?? "-"}</div>
+            <div><strong style={{ color: "#8b1a1a" }}>विक्रम सं.</strong><br />{day.samvats?.vikram ?? "-"}</div>
+            <div><strong style={{ color: "#8b1a1a" }}>शक सं.</strong><br />{day.samvats?.shaka ?? "-"}</div>
+            <div><strong style={{ color: "#8b1a1a" }}>माह (पूर्णि.)</strong><br />{day.hinduMonthPurnimanta?.hi}</div>
+            <div><strong style={{ color: "#8b1a1a" }}>माह (अमां.)</strong><br />{day.hinduMonthAmanta?.hi}</div>
+            <div><strong style={{ color: "#8b1a1a" }}>दिवस अवधि</strong><br />{day.dayDuration ?? "-"}</div>
+            <div><strong style={{ color: "#8b1a1a" }}>ऋतु / अयन</strong><br />{day.ritu?.hi} / {day.ayana?.hi?.slice(0, 4)}</div>
           </div>
 
-          {/* Shubh muhurta + Disha shool */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+          {/* Three-column muhurta block: शुभ | दिशा शूल | अशुभ */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr 1.5fr", gap: 6, marginTop: 6 }}>
+            {/* Shubh muhurta */}
             <div style={{ border: "1px solid #1e7a1e", borderRadius: 6, background: "#f0fff0" }}>
               <div
                 style={{
@@ -292,26 +271,23 @@ export default function DailyPanchangPage({ params }: PageProps) {
                   textAlign: "center",
                   padding: "3px 0",
                   fontWeight: "bold",
-                  fontSize: 12,
+                  fontSize: 11,
                   borderTopLeftRadius: 5,
                   borderTopRightRadius: 5,
                 }}
               >
-                ☀ शुभ मुहूर्त ☀
+                ✓ शुभ मुहूर्त ✓
               </div>
-              <div style={{ padding: "6px 8px", fontSize: 11 }}>
-                <div>
-                  <strong>अभिजित</strong>: {day.muhurtas?.abhijit?.start}–{day.muhurtas?.abhijit?.end}
-                </div>
-                <div>
-                  <strong>ब्रह्म</strong>: {day.muhurtas?.brahmaMuhurta?.start}–{day.muhurtas?.brahmaMuhurta?.end}
-                </div>
-                <div>
-                  <strong>आनंदादि</strong>: {day.anandadiYoga?.nameHi}
-                </div>
-              </div>
+              <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse" }}>
+                <tbody>
+                  <ShubhRow label="अभिजित" m={day.muhurtas?.abhijit} />
+                  <ShubhRow label="ब्रह्म" m={day.muhurtas?.brahmaMuhurta} />
+                </tbody>
+              </table>
             </div>
-            <div style={{ border: "1px solid #6a1b9a", borderRadius: 6, background: "#f8f0ff" }}>
+
+            {/* Disha Shool */}
+            <div style={{ border: "1px solid #6a1b9a", borderRadius: 6, background: "#f8f0ff", display: "flex", flexDirection: "column" }}>
               <div
                 style={{
                   background: "#6a1b9a",
@@ -319,52 +295,48 @@ export default function DailyPanchangPage({ params }: PageProps) {
                   textAlign: "center",
                   padding: "3px 0",
                   fontWeight: "bold",
-                  fontSize: 12,
+                  fontSize: 11,
                   borderTopLeftRadius: 5,
                   borderTopRightRadius: 5,
                 }}
               >
-                ☀ दिशा शूल ☀
+                ⊕ दिशा शूल ⊕
               </div>
-              <div style={{ padding: "6px 8px", fontSize: 13, textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: "bold", color: "#6a1b9a" }}>
-                  {day.dishaShool?.directionHi}
-                </div>
-                <div style={{ fontSize: 10, color: "#666" }}>(आज इस दिशा में यात्रा वर्जित)</div>
+              <div style={{ padding: "8px 4px", textAlign: "center", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: "bold", color: "#6a1b9a" }}>{day.dishaShool?.directionHi}</div>
+                <div style={{ fontSize: 9, color: "#666" }}>यात्रा वर्जित</div>
               </div>
+            </div>
+
+            {/* Ashubh muhurta */}
+            <div style={{ border: "1px solid #b22222", borderRadius: 6, background: "#fff5f0" }}>
+              <div
+                style={{
+                  background: "#b22222",
+                  color: "#fff",
+                  textAlign: "center",
+                  padding: "3px 0",
+                  fontWeight: "bold",
+                  fontSize: 11,
+                  borderTopLeftRadius: 5,
+                  borderTopRightRadius: 5,
+                }}
+              >
+                ✗ अशुभ मुहूर्त ✗
+              </div>
+              <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse" }}>
+                <tbody>
+                  <AshubhRow label="राहु काल" m={day.muhurtas?.rahuKalam} />
+                  <AshubhRow label="यमगंड" m={day.muhurtas?.yamganda} />
+                  <AshubhRow label="गुलिक काल" m={day.muhurtas?.gulikaKalam} />
+                  <AshubhRow label="कुलिक" m={day.muhurtas?.kulik} />
+                  <AshubhRow label="कालवेला" m={day.muhurtas?.kalvela} />
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {/* Ashubh muhurta */}
-          <div style={{ marginTop: 6, border: "1px solid #b22222", borderRadius: 6, background: "#fff5f0" }}>
-            <div
-              style={{
-                background: "#b22222",
-                color: "#fff",
-                textAlign: "center",
-                padding: "3px 0",
-                fontWeight: "bold",
-                fontSize: 12,
-                borderTopLeftRadius: 5,
-                borderTopRightRadius: 5,
-              }}
-            >
-              ☀ अशुभ मुहूर्त ☀
-            </div>
-            <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
-              <tbody>
-                <AshubhRow label="राहु काल" m={day.muhurtas?.rahuKalam} />
-                <AshubhRow label="यमगंड" m={day.muhurtas?.yamganda} />
-                <AshubhRow label="गुलिक काल" m={day.muhurtas?.gulikaKalam} />
-                <AshubhRow label="कुलिक" m={day.muhurtas?.kulik} />
-                <AshubhRow label="कालवेला" m={day.muhurtas?.kalvela} />
-                <AshubhRow label="कंटक / मृत्यु" m={day.muhurtas?.kantakMrityu} />
-                <AshubhRow label="यमघण्ट" m={day.muhurtas?.yamghant} />
-              </tbody>
-            </table>
-          </div>
-
-          {/* Day Choghadiya */}
+          {/* Day Choghadiya — 4-column grid */}
           {day.choghadiya && (
             <div style={{ marginTop: 6, border: "1px solid #8b4513", borderRadius: 6, background: "#fffbf0" }}>
               <div
@@ -374,51 +346,46 @@ export default function DailyPanchangPage({ params }: PageProps) {
                   textAlign: "center",
                   padding: "3px 0",
                   fontWeight: "bold",
-                  fontSize: 12,
+                  fontSize: 11,
                   borderTopLeftRadius: 5,
                   borderTopRightRadius: 5,
                 }}
               >
                 🪔 दिन का चौघड़िया 🪔
               </div>
-              <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
-                <tbody>
-                  {day.choghadiya.day.map((seg, i) => (
-                    <tr
-                      key={i}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                  gap: 0,
+                  padding: 0,
+                }}
+              >
+                {day.choghadiya.day.map((seg, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      background: seg.type === "shubh" ? "#e8ffe8" : "#ffe8e8",
+                      borderRight: i % 4 === 3 ? "none" : "1px solid #e8c890",
+                      borderBottom: i < 4 ? "1px solid #e8c890" : "none",
+                      padding: "3px 6px",
+                      fontSize: 10,
+                      textAlign: "center",
+                    }}
+                  >
+                    <div
                       style={{
-                        background: seg.type === "shubh" ? "#f0fff0" : "#fff0f0",
+                        fontWeight: "bold",
+                        color: seg.type === "shubh" ? "#1e7a1e" : "#b22222",
                       }}
                     >
-                      <td style={{ padding: "3px 8px", fontWeight: "bold", color: seg.type === "shubh" ? "#1e7a1e" : "#b22222" }}>
-                        {seg.nameHi}
-                      </td>
-                      <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "monospace" }}>
-                        {seg.start} – {seg.end}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Today's events */}
-          {day.todayEvents.length > 0 && (
-            <div
-              style={{
-                marginTop: 6,
-                border: "1px solid #d4af37",
-                borderRadius: 6,
-                background: "#fffbe5",
-                padding: "6px 10px",
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: "bold", color: "#8b1a1a", marginBottom: 3 }}>
-                आज के पर्व / कल्याणक:
-              </div>
-              <div style={{ fontSize: 11, lineHeight: 1.5 }}>
-                {day.todayEvents.map((e) => e.nameHi).join(" • ")}
+                      {seg.nameHi}
+                    </div>
+                    <div style={{ fontFamily: "monospace", fontSize: 9, color: "#5a3a0a" }}>
+                      {seg.start}–{seg.end}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -480,10 +447,21 @@ export default function DailyPanchangPage({ params }: PageProps) {
 function KV({ label, value, time }: { label: string; value?: string | null; time?: string }) {
   return (
     <tr style={{ borderBottom: "1px dotted #d4af37" }}>
-      <td style={{ padding: "3px 8px", color: "#8b1a1a", fontWeight: "bold", whiteSpace: "nowrap" }}>{label}</td>
-      <td style={{ padding: "3px 8px", textAlign: "left" }}>{value || "-"}</td>
-      <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "monospace", color: "#5a3a0a" }}>
+      <td style={{ padding: "2px 6px", color: "#8b1a1a", fontWeight: "bold", whiteSpace: "nowrap" }}>{label}</td>
+      <td style={{ padding: "2px 6px", textAlign: "left" }}>{value || "-"}</td>
+      <td style={{ padding: "2px 6px", textAlign: "right", fontFamily: "monospace", color: "#5a3a0a", fontSize: 9 }}>
         {time || ""}
+      </td>
+    </tr>
+  );
+}
+
+function ShubhRow({ label, m }: { label: string; m?: { start: string; end: string } }) {
+  return (
+    <tr style={{ borderBottom: "1px dotted #c0e0c0" }}>
+      <td style={{ padding: "2px 6px", color: "#1e7a1e", fontWeight: "bold" }}>{label}</td>
+      <td style={{ padding: "2px 6px", textAlign: "right", fontFamily: "monospace", fontSize: 9 }}>
+        {m ? `${m.start}–${m.end}` : "-"}
       </td>
     </tr>
   );
@@ -492,11 +470,121 @@ function KV({ label, value, time }: { label: string; value?: string | null; time
 function AshubhRow({ label, m }: { label: string; m?: { start: string; end: string } }) {
   return (
     <tr style={{ borderBottom: "1px dotted #f0c0c0" }}>
-      <td style={{ padding: "3px 8px", color: "#b22222", fontWeight: "bold" }}>{label}</td>
-      <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "monospace" }}>
-        {m ? `${m.start} – ${m.end}` : "-"}
+      <td style={{ padding: "2px 6px", color: "#b22222", fontWeight: "bold", whiteSpace: "nowrap" }}>{label}</td>
+      <td style={{ padding: "2px 6px", textAlign: "right", fontFamily: "monospace", fontSize: 9 }}>
+        {m ? `${m.start}–${m.end}` : "-"}
       </td>
     </tr>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EventsHero — the main event highlight block
+// Shows kalyanaks, parvs, vrats prominently with category badges and color-coding.
+// This is the most important visual element on the daily card.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CATEGORY_META: Record<string, { labelHi: string; bg: string; fg: string; border: string; emoji: string }> = {
+  panch_kalyanak: { labelHi: "कल्याणक", bg: "#fff8dc", fg: "#8b1a1a", border: "#d4af37", emoji: "🕉" },
+  jain_parv:      { labelHi: "पर्व",     bg: "#fff5e0", fg: "#c2410c", border: "#e8730a", emoji: "🪔" },
+  vrat:           { labelHi: "व्रत",     bg: "#fff0f5", fg: "#9a1c5c", border: "#b8860b", emoji: "🌸" },
+  national:       { labelHi: "अवकाश",   bg: "#e8f5ff", fg: "#1e3a8a", border: "#1e88e5", emoji: "🇮🇳" },
+  acharya:        { labelHi: "आचार्य",   bg: "#f0f8ff", fg: "#4b3a8a", border: "#7c3aed", emoji: "🕉" },
+  muhurt:         { labelHi: "मुहूर्त",   bg: "#fff8e0", fg: "#5c4a0a", border: "#b8860b", emoji: "⏱" },
+};
+
+function EventsHero({ day }: { day: PanchangDay }) {
+  if (!day.todayEvents || day.todayEvents.length === 0) {
+    // Still show a small "no events" pill so the layout is consistent
+    return (
+      <div
+        style={{
+          marginTop: 6,
+          padding: "6px 10px",
+          background: "#fff8e0",
+          border: "1px dashed #d4af37",
+          borderRadius: 6,
+          fontSize: 11,
+          textAlign: "center",
+          color: "#8b6e0a",
+          fontStyle: "italic",
+        }}
+      >
+        ॥ आज कोई विशेष पर्व/व्रत/कल्याणक नहीं है ॥
+      </div>
+    );
+  }
+
+  // Group events by category for a structured display
+  const grouped: Record<string, typeof day.todayEvents> = {};
+  for (const e of day.todayEvents) {
+    const cat = e.category || "jain_parv";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(e);
+  }
+
+  // Order: panch_kalyanak, jain_parv, vrat, national, acharya, muhurt
+  const ORDER = ["panch_kalyanak", "jain_parv", "vrat", "national", "acharya", "muhurt"];
+  const ordered = ORDER.filter((c) => grouped[c]);
+
+  return (
+    <div
+      style={{
+        marginTop: 8,
+        background: "linear-gradient(135deg, #fff8dc 0%, #fff2c8 50%, #fff8dc 100%)",
+        border: "2px solid #d4af37",
+        borderRadius: 8,
+        padding: "8px 10px",
+        boxShadow: "inset 0 0 0 1px #ffe080",
+      }}
+    >
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 11,
+          fontWeight: "bold",
+          color: "#8b1a1a",
+          letterSpacing: 1,
+          marginBottom: 6,
+        }}
+      >
+        ✦ ✦ ✦ आज का विशेष ✦ ✦ ✦
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        {ordered.map((cat) => {
+          const meta = CATEGORY_META[cat] || CATEGORY_META.jain_parv;
+          const events = grouped[cat];
+          return (
+            <div key={cat} style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+              <div
+                style={{
+                  background: meta.fg,
+                  color: "#fff",
+                  fontSize: 9,
+                  fontWeight: "bold",
+                  padding: "2px 6px",
+                  borderRadius: 10,
+                  whiteSpace: "nowrap",
+                  minWidth: 56,
+                  textAlign: "center",
+                  marginTop: 1,
+                }}
+              >
+                {meta.emoji} {meta.labelHi}
+              </div>
+              <div style={{ flex: 1, fontSize: 13, lineHeight: 1.45, color: meta.fg, fontWeight: 600 }}>
+                {events.map((e, i) => (
+                  <span key={e.eventId}>
+                    {i > 0 && <span style={{ color: "#aaa", margin: "0 4px" }}>•</span>}
+                    {e.nameHi}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

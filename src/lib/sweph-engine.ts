@@ -702,14 +702,18 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   // Day duration
   const dayDuration = formatDuration(sunset.getTime() - sunrise.getTime());
 
-  // Samvats — Vir Nirvan starts 527 BCE; Mahavir Janma 599 BCE. Vikram Samvat = Year + 56/57.
-  // VNS year fill-in happens after Diwali detection in the main pass.
+  // Samvats:
+  //   Vikram Samvat ≈ civilYear + 56/57 (depends on Chaitra Shukla 1 boundary)
+  //   Shaka Samvat  = civilYear - 78
+  //   Vir Nirvan Samvat = civilYear + 526/527 (Mahavir's Nirvana, 527 BCE; boundary = Diwali)
+  //   Mahavir Janma Samvat = civilYear + 598/599 (Mahavir's birth, 599 BCE; boundary = Mahavir
+  //     Jayanti / Chaitra Shukla 13). VNS year fill-in (Diwali boundary) happens post-pass.
   const civilYear = localDate.getUTCFullYear();
   const samvats = {
-    vikram: civilYear + 56,        // approximate; refined post-Chaitra-Shukla-1
+    vikram: civilYear + 56,
     shaka: civilYear - 78,
-    virNirvan: civilYear - 526,    // approximate; refined post-Diwali
-    mahavirJanma: civilYear - 599,
+    virNirvan: civilYear + 526,    // refined post-Diwali in second pass
+    mahavirJanma: civilYear + 599,
   };
 
   // Moonrise / moonset for the same civil day
@@ -915,18 +919,46 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
     }
   }
 
-  // VNS year (use Diwali as boundary)
+  // Refine samvat year boundaries:
+  //   Vir Nirvan Samvat — boundary = Diwali (Kartik Krishna Amavasya)
+  //   Vikram Samvat — boundary = Chaitra Shukla 1 (start of new lunar year)
+  //   Mahavir Janma Samvat — boundary = Chaitra Shukla 13 (Mahavir Jayanti)
   const approxDiwali: Record<number, string> = {
     2024: "2024-11-01", 2025: "2025-10-20", 2026: "2026-11-08", 2027: "2027-10-29",
     2028: "2028-10-17", 2029: "2029-11-05", 2030: "2030-10-26",
   };
+  // Find each year's Chaitra Shukla 1 by scanning allDays (for Vikram Samvat boundary)
+  const chaitraShukla1ByYear: Record<number, string> = {};
+  for (const day of allDays) {
+    const yr = new Date(day.date).getFullYear();
+    if (
+      day.hinduMonth.en === "Chaitra" &&
+      day.tithi.pakshaEn.includes("Shukla") &&
+      day.tithi.number === 1 &&
+      !chaitraShukla1ByYear[yr]
+    ) {
+      chaitraShukla1ByYear[yr] = day.date;
+    }
+  }
   for (const day of allDays) {
     const d = new Date(day.date);
     const yr = d.getFullYear();
+    // Vir Nirvan Samvat: increments at Diwali (Kartik Krishna Amavasya)
     const diwali = approxDiwali[yr] ? new Date(approxDiwali[yr]) : new Date(yr, 9, 25);
     const vns = d >= diwali ? yr + 527 : yr + 526;
     day.vnsYear = vns;
-    if (day.samvats) day.samvats.virNirvan = vns;
+    // Vikram Samvat: increments at Chaitra Shukla 1
+    const cs1 = chaitraShukla1ByYear[yr] ? new Date(chaitraShukla1ByYear[yr]) : new Date(yr, 2, 22);
+    const vikram = d >= cs1 ? yr + 57 : yr + 56;
+    // Mahavir Janma Samvat = Vir Nirvan Samvat + 73 (Mahavir lived 72 years; the "Janma Samvat"
+    // is conventionally locked to the same Diwali boundary as Nirvan Samvat by the published
+    // तीर्थंकर वर्धमान जैन पंचांग, both incrementing together).
+    const mjs = vns + 73;
+    if (day.samvats) {
+      day.samvats.virNirvan = vns;
+      day.samvats.vikram = vikram;
+      day.samvats.mahavirJanma = mjs;
+    }
   }
 
   // Upcoming events
