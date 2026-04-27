@@ -18,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </a>
             <div className="flex gap-4 text-sm">
               <a href="/" className="text-gray-400 hover:text-orange-400">Generate</a>
+              <a href="/daily" className="text-gray-400 hover:text-orange-400">Daily Card</a>
               <a href="/events" className="text-gray-400 hover:text-orange-400">Events Master</a>
               <a href="/print-calendar" className="text-gray-400 hover:text-orange-400">Print Calendar</a>
             </div>

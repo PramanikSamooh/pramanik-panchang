@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { generateYearPanchang, generateRangePanchang } from "@/lib/panchang-engine";
 import { getAllJainEvents } from "@/data/jain-events";
 import type { PanchangDay, EventSummary } from "@/lib/types";
 import type { JainEventCategory } from "@/data/jain-events";
@@ -78,12 +77,12 @@ export default function Home() {
     setGenerating(true);
     setPanchangData([]);
 
-    let events;
+    let customEvents;
     try {
       const saved = localStorage.getItem("pramanik_jain_events");
-      events = saved ? JSON.parse(saved) : getAllJainEvents();
+      customEvents = saved ? JSON.parse(saved) : undefined;
     } catch {
-      events = getAllJainEvents();
+      customEvents = undefined;
     }
 
     const loc = LOCATIONS[locationIdx];
@@ -92,21 +91,48 @@ export default function Home() {
     const tz = loc.name === "Custom" ? parseInt(customTz) : loc.tz;
     const locConfig = { lat, lng, tz };
 
-    let data: PanchangDay[];
+    let body: Record<string, unknown>;
     if (genMode === "range") {
-      // Calculate end month/year from start + rangeMonths
       let endMonth = startMonth + rangeMonths - 1;
       let endYear = startYear;
       while (endMonth > 11) { endMonth -= 12; endYear++; }
       setProgress({ done: 0, total: rangeMonths * 30 });
-      data = await generateRangePanchang(startMonth, startYear, endMonth, endYear, events, locConfig, (done, total) => {
-        setProgress({ done, total });
-      });
+      body = {
+        mode: "range",
+        startMonth, startYear, endMonth, endYear,
+        location: locConfig,
+        customEvents,
+      };
     } else {
       setProgress({ done: 0, total: 365 });
-      data = await generateYearPanchang(year, events, locConfig, (done, total) => {
-        setProgress({ done, total });
+      body = {
+        mode: "year",
+        year,
+        location: locConfig,
+        customEvents,
+      };
+    }
+
+    let data: PanchangDay[];
+    try {
+      const res = await fetch("/api/panchang", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        alert("Failed to generate panchang: " + (err.error ?? res.statusText));
+        setGenerating(false);
+        return;
+      }
+      const json = await res.json();
+      data = (json.days ?? []) as PanchangDay[];
+      setProgress({ done: data.length, total: data.length });
+    } catch (e) {
+      alert("Network error generating panchang: " + (e instanceof Error ? e.message : String(e)));
+      setGenerating(false);
+      return;
     }
 
     setPanchangData(data);
