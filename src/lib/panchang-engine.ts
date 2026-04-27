@@ -1,5 +1,10 @@
-import { HINDU_MONTHS, TITHI_NAMES_HI, TITHI_NAMES_EN, getTithi15Name, type JainEvent } from "@/data/jain-events";
-import type { PanchangDay, EventSummary, UpcomingEvent } from "./types";
+import {
+  HINDU_MONTHS, TITHI_NAMES_HI, TITHI_NAMES_EN, getTithi15Name,
+  NAKSHATRA_NAMES_HI, NAKSHATRA_NAMES_EN, YOGA_NAMES_HI,
+  KARANA_NAMES_HI, RITU_HI, AYANA_HI, RASHI_NAMES_HI,
+  type JainEvent,
+} from "@/data/jain-events";
+import type { PanchangDay, EventSummary, UpcomingEvent, SpecialYogaPeriod } from "./types";
 
 const VARA_HI = ["रविवार", "सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार"];
 const VARA_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -21,6 +26,17 @@ function formatDateStr(date: Date): string {
  * Uses the Jain reckoning: tithi active at sunrise + 6 ghati (144 minutes).
  */
 const SIX_GHATI_MS = 144 * 60 * 1000;
+
+// Normalize library's masa.name to our canonical English month names
+const MASA_ALIAS: Record<string, string> = {
+  "Ashwina": "Ashwin",
+  "Kartika": "Kartik",
+  "Pausha": "Pausha",
+  "Magha": "Magha",
+};
+function normalizeMasaName(name: string): string {
+  return MASA_ALIAS[name] || name;
+}
 
 export interface LocationConfig {
   lat: number;
@@ -80,7 +96,10 @@ async function generatePanchangForRange(
 
     let pResult;
     try {
-      pResult = getPanchangam(date, observer, { timezoneOffset: location.tz });
+      // Jain Digambara panchang typically uses Purnimanta (month ends on Purnima), matching the
+      // authoritative "तीर्थंकर वर्धमान जैन पंचांग" source. Setting explicit calendarType here so
+      // the output's month labels match the Excel for cross-verification.
+      pResult = getPanchangam(date, observer, { timezoneOffset: location.tz, calendarType: "purnimanta" });
     } catch (e) {
       console.error(`Error computing panchang for ${dateStr}:`, e);
       continue;
@@ -121,22 +140,108 @@ async function generatePanchangForRange(
     // 15th tithi: Purnima (Shukla) or Amavasya (Krishna)
     const tithi15 = tithiInPaksha === 15 ? getTithi15Name(paksha) : null;
 
-    // Hindu month from masa
-    const masaName = pResult.masa?.name || "Unknown";
-    const hinduMonthEn = masaName;
-    const hinduMonthHi = HINDU_MONTHS.find((m) => m.en === hinduMonthEn)?.hi || masaName;
+    // Hindu month from masa (library returns "Ashwina"/"Kartika" — normalize to our canonical names)
+    const rawMasaName = pResult.masa?.name || "Unknown";
+    const hinduMonthEn = normalizeMasaName(rawMasaName);
+    const hinduMonthHi = HINDU_MONTHS.find((m) => m.en === hinduMonthEn)?.hi || hinduMonthEn;
+    const masaIsAdhika = !!pResult.masa?.isAdhika;
 
     // Detect Diwali (Kartik Krishna Amavasya = tithi 30 or Krishna 15)
     if (hinduMonthEn === "Kartik" && paksha === "Krishna" && tithiInPaksha >= 14) {
       if (!diwaliDate) diwaliDate = date;
     }
 
-    // Match events (tithi rules + Gregorian overrides)
-    const todayEvents = matchEventsForDate(dateStr, date.getFullYear(), hinduMonthEn, paksha, tithiInPaksha, activeEvents);
+    // Nakshatra (library nakshatra is 0-indexed)
+    const nakshatraIdx = Math.min(Math.max(pResult.nakshatra ?? 0, 0), 26);
+    const nakshatraNumber = nakshatraIdx + 1; // 1..27
 
-    // VNS date string
+    // Match events (tithi rules + Gregorian overrides + nakshatra + adhika-maas policy)
+    const todayEvents = matchEventsForDate(
+      dateStr, date.getFullYear(), hinduMonthEn, paksha, tithiInPaksha,
+      nakshatraNumber, masaIsAdhika, activeEvents
+    );
+
+    // VNS date string (append adhika/nija label if applicable)
     const pakshaLabelHi = paksha === "Shukla" ? "शुक्ल" : "कृष्ण";
-    const vnsDateHi = `${hinduMonthHi} ${pakshaLabelHi} ${tithiInPaksha}`;
+    const adhikaSuffixHi = masaIsAdhika ? " (अधिक)" : "";
+    const vnsDateHi = `${hinduMonthHi}${adhikaSuffixHi} ${pakshaLabelHi} ${tithiInPaksha}`;
+
+    // Yoga / karana
+    const yogaIdx = Math.min(Math.max(pResult.yoga ?? 0, 0), 26);
+    const yogaNameEn = [
+      "Vishkambha","Priti","Ayushman","Saubhagya","Shobhana","Atiganda",
+      "Sukarman","Dhriti","Shula","Ganda","Vriddhi","Dhruva","Vyaghata",
+      "Harshana","Vajra","Siddhi","Vyatipata","Variyana","Parigha",
+      "Shiva","Siddha","Sadhya","Shubha","Shukla","Brahma","Indra","Vaidhriti",
+    ][yogaIdx];
+    const karanaName = pResult.karana || "";
+
+    // ── Phase B: rashi, panchak, bhadra, mool, special yogas ──
+    // Moon rashi (1..12; library exposes 0-indexed)
+    const moonRashiIdx = Math.min(Math.max((pResult.moonRashi?.index ?? 0), 0), 11);
+    const sunRashiIdx = Math.min(Math.max((pResult.sunRashi?.index ?? 0), 0), 11);
+    const sunNakIdx = Math.min(Math.max((pResult.sunNakshatra?.index ?? 0), 0), 26);
+    const RASHI_EN = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
+
+    // Panchak: moon nakshatra ∈ {Dhanishta(2nd half / #23 second pada), Shatabhisha(24), P-Bhadrapada(25), U-Bhadrapada(26), Revati(27)}.
+    // For simplicity we mark panchak when moon is in any of {23,24,25,26,27} for now. Pada-level
+    // precision (only Dhanishta 2nd half) is a future refinement.
+    const isPanchak = nakshatraNumber >= 23 && nakshatraNumber <= 27;
+    // Bhadra: any karana transition with name = Vishti during the day
+    const bhadraPeriods: Array<{ startTime: string; endTime: string }> = [];
+    if (Array.isArray(pResult.karanaTransitions)) {
+      for (const kt of pResult.karanaTransitions) {
+        if (kt.name && kt.name.toLowerCase().includes("vishti")) {
+          bhadraPeriods.push({
+            startTime: formatTime(kt.startTime),
+            endTime: formatTime(kt.endTime),
+          });
+        }
+      }
+    }
+    const isBhadraActive = bhadraPeriods.length > 0 || karanaName.toLowerCase().includes("vishti");
+    // Mool / Gandanta: moon in any of the rashi-junction nakshatras Ashlesha(9), Magha(10),
+    // Jyeshtha(18), Mula(19), Revati(27), Ashwini(1). Per the Jain panchang's "मूल" sheet, all
+    // six are flagged. (A finer rule could limit to specific padas, but for Phase B this is
+    // sufficient to match the Excel.)
+    const isMool = [1, 9, 10, 18, 19, 27].includes(nakshatraNumber);
+
+    // Special yogas — library exposes a list of named yogas active on this date
+    const SPECIAL_YOGA_KEY_MAP: Record<string, SpecialYogaPeriod["key"]> = {
+      "ravi yoga": "ravi", "raviyoga": "ravi",
+      "sarvarthasiddhi yoga": "sarvarthasiddhi", "sarvartha siddhi yoga": "sarvarthasiddhi",
+      "amrit siddhi yoga": "amrit-siddhi", "amritsiddhi yoga": "amrit-siddhi",
+      "ravi pushya yoga": "ravipushya", "ravipushya": "ravipushya",
+      "guru pushya yoga": "gurupushya", "gurupushya": "gurupushya",
+      "tripushkar yoga": "tripushkar", "tripushkara yoga": "tripushkar",
+      "dvipushkar yoga": "dvipushkar", "dvipushkara yoga": "dvipushkar",
+    };
+    const SPECIAL_YOGA_HI: Record<SpecialYogaPeriod["key"], { hi: string; en: string }> = {
+      ravi:           { hi: "रवियोग",         en: "Ravi Yoga" },
+      sarvarthasiddhi:{ hi: "सर्वार्थसिद्धि योग", en: "Sarvarthasiddhi Yoga" },
+      "amrit-siddhi": { hi: "अमृत सिद्धि योग",  en: "Amrit Siddhi Yoga" },
+      ravipushya:     { hi: "रवि पुष्य योग",   en: "Ravi Pushya Yoga" },
+      gurupushya:     { hi: "गुरु पुष्य योग",  en: "Guru Pushya Yoga" },
+      tripushkar:     { hi: "त्रिपुष्कर योग",   en: "Tripushkar Yoga" },
+      dvipushkar:     { hi: "द्विपुष्कर योग",   en: "Dvipushkar Yoga" },
+    };
+    const specialYogas: SpecialYogaPeriod[] = [];
+    if (Array.isArray(pResult.specialYogas)) {
+      for (const sy of pResult.specialYogas) {
+        const lookup = SPECIAL_YOGA_KEY_MAP[(sy.name || "").toLowerCase().trim()];
+        if (!lookup) continue;
+        const labels = SPECIAL_YOGA_HI[lookup];
+        // Library doesn't expose per-yoga start/end Date objects on this object; populate sunrise→sunset
+        // as a placeholder window. Day-over-day refinement comes in a later pass.
+        specialYogas.push({
+          key: lookup,
+          nameHi: labels.hi,
+          nameEn: labels.en,
+          startTime: formatTime(pResult.sunrise),
+          endTime: formatTime(pResult.sunset),
+        });
+      }
+    }
 
     allDays.push({
       date: dateStr,
@@ -156,6 +261,57 @@ async function generatePanchangForRange(
       hinduMonth: { hi: hinduMonthHi, en: hinduMonthEn },
       todayEvents,
       upcomingEvents: [],
+      nakshatra: {
+        number: nakshatraNumber,
+        nameHi: NAKSHATRA_NAMES_HI[nakshatraIdx] || "",
+        nameEn: NAKSHATRA_NAMES_EN[nakshatraIdx] || "",
+        endTime: formatTime(pResult.nakshatraEndTime),
+      },
+      yoga: {
+        number: yogaIdx + 1,
+        nameHi: YOGA_NAMES_HI[yogaIdx] || "",
+        nameEn: yogaNameEn || "",
+        endTime: formatTime(pResult.yogaEndTime),
+      },
+      karana: karanaName
+        ? {
+            nameHi: KARANA_NAMES_HI[karanaName] || karanaName,
+            nameEn: karanaName,
+            endTime: formatTime(pResult.karanaTransitions?.[0]?.endTime ?? null),
+          }
+        : undefined,
+      sunTimes: {
+        sunrise: formatTime(pResult.sunrise),
+        sunset: formatTime(pResult.sunset),
+        moonrise: formatTime(pResult.moonrise),
+        moonset: formatTime(pResult.moonset),
+      },
+      rahuKalam: (pResult.rahuKalamStart && pResult.rahuKalamEnd) ? {
+        start: formatTime(pResult.rahuKalamStart),
+        end: formatTime(pResult.rahuKalamEnd),
+      } : undefined,
+      masaIsAdhika,
+      ritu: pResult.ritu ? { hi: RITU_HI[pResult.ritu] || pResult.ritu, en: pResult.ritu } : undefined,
+      ayana: pResult.ayana ? { hi: AYANA_HI[pResult.ayana] || pResult.ayana, en: pResult.ayana } : undefined,
+      moonRashi: pResult.moonRashi ? {
+        number: moonRashiIdx + 1,
+        nameHi: RASHI_NAMES_HI[moonRashiIdx] || "",
+        nameEn: RASHI_EN[moonRashiIdx] || pResult.moonRashi.name || "",
+      } : undefined,
+      sunRashi: pResult.sunRashi ? {
+        number: sunRashiIdx + 1,
+        nameHi: RASHI_NAMES_HI[sunRashiIdx] || "",
+        nameEn: RASHI_EN[sunRashiIdx] || pResult.sunRashi.name || "",
+      } : undefined,
+      sunNakshatra: pResult.sunNakshatra ? {
+        number: sunNakIdx + 1,
+        nameHi: NAKSHATRA_NAMES_HI[sunNakIdx] || "",
+        nameEn: NAKSHATRA_NAMES_EN[sunNakIdx] || pResult.sunNakshatra.name || "",
+      } : undefined,
+      specialYogas: specialYogas.length > 0 ? specialYogas : undefined,
+      panchak: isPanchak,
+      bhadra: isBhadraActive ? { active: true, periods: bhadraPeriods.length > 0 ? bhadraPeriods : undefined } : { active: false },
+      mool: isMool,
     });
 
     onProgress?.(i + 1, totalDays);
@@ -186,9 +342,19 @@ async function generatePanchangForRange(
 
         // Match events for the skipped tithi and merge into previous day
         const paksha = prev.tithi.pakshaEn.includes("Shukla") ? "Shukla" : "Krishna";
-        const skippedEvents = matchEventsForDate(prev.date, new Date(prev.date).getFullYear(), prev.hinduMonth.en, paksha, skippedNum, activeEvents);
+        const prevNakshatra = prev.nakshatra?.number ?? 0;
+        const prevMasaIsAdhika = prev.masaIsAdhika ?? false;
+        const skippedEvents = matchEventsForDate(
+          prev.date, new Date(prev.date).getFullYear(), prev.hinduMonth.en, paksha,
+          skippedNum, prevNakshatra, prevMasaIsAdhika, activeEvents
+        );
         if (skippedEvents.length > 0) {
-          allDays[i - 1].todayEvents = [...allDays[i - 1].todayEvents, ...skippedEvents];
+          const existingIds = new Set(allDays[i - 1].todayEvents.map((e) => e.eventId));
+          for (const evt of skippedEvents) {
+            if (!existingIds.has(evt.eventId)) {
+              allDays[i - 1].todayEvents.push(evt);
+            }
+          }
         }
       }
     }
@@ -208,6 +374,62 @@ async function generatePanchangForRange(
         }
         allDays[i].todayEvents = []; // Clear events from repeat day
       }
+    }
+  }
+
+  // ── Day-over-day transit detection for moonRashi / sunRashi / sunNakshatra ──
+  // When the value differs from the previous day, mark this day as the transit day with
+  // entryTime = the day's sunrise (placeholder; finer interpolation can come in a later pass).
+  for (let i = 0; i < allDays.length; i++) {
+    if (i === 0) continue;
+    const prev = allDays[i - 1];
+    const curr = allDays[i];
+    if (curr.moonRashi && prev.moonRashi && curr.moonRashi.number !== prev.moonRashi.number) {
+      curr.moonRashi = { ...curr.moonRashi, entryTime: curr.sunTimes?.sunrise };
+    }
+    if (curr.sunRashi && prev.sunRashi && curr.sunRashi.number !== prev.sunRashi.number) {
+      curr.sunRashi = { ...curr.sunRashi, entryTime: curr.sunTimes?.sunrise };
+    }
+    if (curr.sunNakshatra && prev.sunNakshatra && curr.sunNakshatra.number !== prev.sunNakshatra.number) {
+      curr.sunNakshatra = { ...curr.sunNakshatra, entryTime: curr.sunTimes?.sunrise };
+    }
+  }
+
+  // ── First-occurrence-wins (adhika maas handling) ──
+  // For tithi-based events: when a Hindu month repeats in the year (adhika maas), the event
+  // should fire only on the FIRST occurrence per civil year. Without this pass an event like
+  // Shantinath janma would fire twice in 2026 (both Jyeshthas).
+  //
+  // Multi-day vrats (with tithiRange) should fire on EVERY day in their tithi window during the
+  // first matching month — but not repeat in a second month. This is implemented by tracking the
+  // last-fired day index per eventId; consecutive-day firings are kept (multi-day vrat continuing),
+  // gap firings are dropped (re-occurrence in adhika month).
+  //
+  // Excluded from de-duplication entirely (always fire):
+  //   - fixed-Gregorian events (national holidays)
+  //   - nakshatra-rule events (Rohini Vrat — designed to recur monthly when moon enters Rohini)
+  {
+    const eventLookup = new Map(activeEvents.map((e) => [e.id, e]));
+    const lastFiredIdx = new Map<string, number>();
+    for (let i = 0; i < allDays.length; i++) {
+      const day = allDays[i];
+      const filtered: typeof day.todayEvents = [];
+      for (const evt of day.todayEvents) {
+        const def = eventLookup.get(evt.eventId);
+        const alwaysFire = !!(def?.fixedDate || def?.nakshatraRule);
+        if (alwaysFire) {
+          filtered.push(evt);
+          continue;
+        }
+        const last = lastFiredIdx.get(evt.eventId);
+        if (last === undefined || last === i - 1) {
+          // First firing or consecutive-day continuation of a multi-day vrat
+          filtered.push(evt);
+          lastFiredIdx.set(evt.eventId, i);
+        }
+        // else: gap firing in a later month — drop (event already fired earlier in the year)
+      }
+      day.todayEvents = filtered;
     }
   }
 
@@ -252,6 +474,8 @@ function matchEventsForDate(
   hinduMonth: string,
   paksha: string,
   tithiNumber: number,
+  nakshatraNumber: number,
+  masaIsAdhika: boolean,
   events: JainEvent[]
 ): EventSummary[] {
   const matched: EventSummary[] = [];
@@ -268,7 +492,21 @@ function matchEventsForDate(
     else if (event.gregorianOverrides && event.gregorianOverrides[yearStr] === dateStr) {
       isMatch = true;
     }
-    // Then check tithi rule
+    // Nakshatra rule (e.g. Rohini Vrat — fires whenever moon is in Rohini)
+    else if (event.nakshatraRule && event.nakshatraRule.nakshatraNumber === nakshatraNumber) {
+      isMatch = true;
+    }
+    // Tithi range (multi-day vrat — fires on every tithi in [start..end])
+    else if (
+      event.tithiRange &&
+      event.hinduMonth === hinduMonth &&
+      event.hinduPaksha === paksha &&
+      tithiNumber >= event.tithiRange.startTithi &&
+      tithiNumber <= event.tithiRange.endTithi
+    ) {
+      isMatch = true;
+    }
+    // Single-tithi rule
     else if (
       event.hinduMonth &&
       event.hinduMonth === hinduMonth &&
@@ -276,6 +514,17 @@ function matchEventsForDate(
       event.hinduTithi === tithiNumber
     ) {
       isMatch = true;
+    }
+
+    // Adhika-maas gate (only applies to events selected by a Hindu-month rule, not fixedDate/Gregorian)
+    // Default "both" so events fire on every occurrence of the month (adhika + nija).
+    // Per-event override to "nija-only" or "adhika-only" allows fine-grained control.
+    if (isMatch && !event.fixedDate && !event.gregorianOverrides?.[yearStr]) {
+      const policy = event.adhikaMaasPolicy ?? "both";
+      if (policy === "nija-only" && masaIsAdhika) isMatch = false;
+      else if (policy === "adhika-only" && !masaIsAdhika) isMatch = false;
+      else if (policy === "skip") isMatch = false;
+      // "both" → always match
     }
 
     if (isMatch) {

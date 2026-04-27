@@ -4,8 +4,18 @@ import { useState, useCallback } from "react";
 import { generateYearPanchang, generateRangePanchang } from "@/lib/panchang-engine";
 import { getAllJainEvents } from "@/data/jain-events";
 import type { PanchangDay, EventSummary } from "@/lib/types";
+import type { JainEventCategory } from "@/data/jain-events";
 
 type GenMode = "year" | "range";
+
+const CATEGORY_OPTIONS: Array<{ key: JainEventCategory; label: string; defaultOn: boolean }> = [
+  { key: "panch_kalyanak", label: "Panch Kalyanak", defaultOn: true },
+  { key: "jain_parv", label: "Jain Parv", defaultOn: true },
+  { key: "vrat", label: "Vrat", defaultOn: true },
+  { key: "national", label: "National / Government", defaultOn: true },
+  { key: "acharya", label: "Acharya Darpan", defaultOn: false },
+  { key: "muhurt", label: "Muhurt", defaultOn: false },
+];
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -41,6 +51,28 @@ export default function Home() {
   const [filterEvents, setFilterEvents] = useState(false);
   const [search, setSearch] = useState("");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [exportCategories, setExportCategories] = useState<Set<JainEventCategory>>(
+    () => new Set(CATEGORY_OPTIONS.filter((c) => c.defaultOn).map((c) => c.key)),
+  );
+
+  const toggleExportCategory = (key: JainEventCategory) => {
+    setExportCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Produce a copy of panchangData with events filtered to the selected categories
+  const dataForExport = (): PanchangDay[] =>
+    panchangData.map((d) => ({
+      ...d,
+      todayEvents: d.todayEvents.filter((e) =>
+        exportCategories.has(e.category as JainEventCategory),
+      ),
+      upcomingEvents: d.upcomingEvents, // upcoming don't carry category; keep as-is
+    }));
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true);
@@ -83,7 +115,7 @@ export default function Home() {
   }, [genMode, year, startMonth, startYear, rangeMonths, locationIdx, customLat, customLng, customTz]);
 
   const handleDownloadJSON = () => {
-    const blob = new Blob([JSON.stringify(panchangData, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(dataForExport(), null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -94,7 +126,7 @@ export default function Home() {
 
   const handleDownloadCSV = () => {
     const header = "Date,Day (Hi),Day (En),VNS Year,Tithi (Hi),Tithi (En),Paksha (Hi),Hindu Month (Hi),Start Time,End Time,Events\n";
-    const rows = panchangData.map((d) =>
+    const rows = dataForExport().map((d) =>
       `${d.date},"${d.varaHi}","${d.varaEn}",${d.vnsYear},"${d.tithi.nameHi}","${d.tithi.nameEn}","${d.tithi.pakshaHi}","${d.hinduMonth.hi}","${d.tithi.startTime}","${d.tithi.endTime}","${d.todayEvents.map((e) => e.nameEn).join("; ")}"`
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
@@ -266,19 +298,37 @@ export default function Home() {
         )}
 
         {panchangData.length > 0 && !generating && (
-          <div className="flex gap-2 ml-auto">
-            <button
-              onClick={handleDownloadJSON}
-              className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-300 hover:border-orange-500 hover:text-orange-400"
-            >
-              Download JSON
-            </button>
-            <button
-              onClick={handleDownloadCSV}
-              className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-300 hover:border-orange-500 hover:text-orange-400"
-            >
-              Download CSV
-            </button>
+          <div className="flex flex-col gap-3 pt-2 border-t border-gray-800">
+            <div>
+              <div className="text-xs text-gray-400 mb-1.5">Categories to include in export:</div>
+              <div className="flex flex-wrap gap-3">
+                {CATEGORY_OPTIONS.map((cat) => (
+                  <label key={cat.key} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportCategories.has(cat.key)}
+                      onChange={() => toggleExportCategory(cat.key)}
+                      className="accent-orange-500"
+                    />
+                    {cat.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 ml-auto">
+              <button
+                onClick={handleDownloadJSON}
+                className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-300 hover:border-orange-500 hover:text-orange-400"
+              >
+                Download JSON
+              </button>
+              <button
+                onClick={handleDownloadCSV}
+                className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-300 hover:border-orange-500 hover:text-orange-400"
+              >
+                Download CSV
+              </button>
+            </div>
           </div>
         )}
       </div>
