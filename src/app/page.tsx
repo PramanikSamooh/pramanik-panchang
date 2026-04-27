@@ -120,13 +120,20 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        alert("Failed to generate panchang: " + (err.error ?? res.statusText));
+      // Handle both JSON and HTML/text error bodies (e.g., when the route itself crashes
+      // and Next falls back to an HTML error page).
+      const text = await res.text();
+      let json: { days?: PanchangDay[]; error?: string } = {};
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        json = { error: text.slice(0, 500) || `HTTP ${res.status} ${res.statusText}` };
+      }
+      if (!res.ok || json.error) {
+        alert("Failed to generate panchang: " + (json.error ?? `HTTP ${res.status}`));
         setGenerating(false);
         return;
       }
-      const json = await res.json();
       data = (json.days ?? []) as PanchangDay[];
       setProgress({ done: data.length, total: data.length });
     } catch (e) {

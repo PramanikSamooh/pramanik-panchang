@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generatePanchang, computeSingleDay, type LocationConfig } from "@/lib/sweph-engine";
-import { getAllJainEvents, type JainEvent } from "@/data/jain-events";
+import type { LocationConfig } from "@/lib/sweph-engine";
+import type { JainEvent } from "@/data/jain-events";
 
 // Force Node.js runtime — sweph is a native binding, can't run on Edge
 export const runtime = "nodejs";
@@ -20,6 +20,14 @@ interface PanchangRequest {
 
 export async function POST(req: NextRequest) {
   try {
+    // Lazy-load the engine and events so any module-load failure (e.g., sweph native binary
+    // missing) is caught here and returned as a structured JSON error instead of a generic
+    // "Internal Server Error" HTML page.
+    const [{ generatePanchang, computeSingleDay }, { getAllJainEvents }] = await Promise.all([
+      import("@/lib/sweph-engine"),
+      import("@/data/jain-events"),
+    ]);
+
     const body = (await req.json()) as PanchangRequest;
     const events = body.customEvents ?? getAllJainEvents();
 
@@ -62,6 +70,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ days });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error("[/api/panchang] error:", msg, stack);
+    return NextResponse.json({ error: msg, stack: process.env.NODE_ENV === "production" ? undefined : stack }, { status: 500 });
+  }
+}
+
+// Health probe — GET /api/panchang returns OK if the engine module loads cleanly.
+export async function GET() {
+  try {
+    await import("@/lib/sweph-engine");
+    return NextResponse.json({ ok: true });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 }

@@ -40,22 +40,36 @@ export default function DailyPanchangPage({ params }: PageProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch("/api/panchang", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "single",
-        date: dateParam,
-        location: { lat: city.lat, lng: city.lng, tz: city.tz },
-      }),
-    })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.error) setError(j.error);
-        else setDay(j.days?.[0] ?? null);
-      })
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
+    (async () => {
+      try {
+        const res = await fetch("/api/panchang", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "single",
+            date: dateParam,
+            location: { lat: city.lat, lng: city.lng, tz: city.tz },
+          }),
+        });
+        // Robust error handling: API may return HTML/text on a server crash, not JSON.
+        const text = await res.text();
+        let json: { days?: PanchangDay[]; error?: string } = {};
+        try {
+          json = text ? JSON.parse(text) : {};
+        } catch {
+          json = { error: text.slice(0, 500) || `HTTP ${res.status} ${res.statusText}` };
+        }
+        if (!res.ok || json.error) {
+          setError(json.error ?? `HTTP ${res.status}`);
+        } else {
+          setDay(json.days?.[0] ?? null);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [dateParam, city]);
 
   const downloadPng = async () => {
