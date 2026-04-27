@@ -504,7 +504,7 @@ const JAIN_PARV: JainEvent[] = [
   {
     id: "akshaya-tritiya",
     category: "jain_parv", tirthankaraNumber: 1, kalyanakType: null,
-    nameHi: "अक्षय तृतीया", nameEn: "Akshaya Tritiya",
+    nameHi: "अक्षय तृतीया (दान दिवस)", nameEn: "Akshaya Tritiya (Daan Divas)",
     hinduMonth: "Vaishakha", hinduPaksha: "Shukla", hinduTithi: 3,
     colorTheme: "#D4AF37", isActive: true,
   },
@@ -626,7 +626,7 @@ function generateNationalHolidays(): JainEvent[] {
 
     // April
     natl("ambedkar-jayanti", "डॉ. अम्बेडकर जयंती", "Dr. Ambedkar Jayanti", "04-14"),
-    natl("dan-divas", "दान दिवस", "Daan Divas", "04-19"),
+    // Daan Divas is the same day as Akshaya Tritiya (Vaishakh Shukla 3) — merged into that entry.
     natl("earth-day", "पृथ्वी दिवस", "Earth Day", "04-22", C_OBSERVANCE),
 
     // May
