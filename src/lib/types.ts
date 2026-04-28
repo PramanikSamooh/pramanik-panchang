@@ -104,6 +104,9 @@ export interface PanchangDay {
   // Both calendar conventions for header display
   hinduMonthAmanta?: { hi: string; en: string };
   hinduMonthPurnimanta?: { hi: string; en: string };
+
+  // Ras Tyag — the food/taste traditionally given up on this weekday (Jain practice)
+  rasTyag?: { rasHi: string; rasEn: string; itemsHi: string; itemsEn: string; emoji: string };
 }
 
 // ── Phase B (reserved — shipped in subsequent release) ──

@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pramanik Panchang Tool",
-  description: "Jain Panchang Generator — Tithi Computation & Event Calendar",
+  title: "तीर्थंकर वर्धमान जैन पंचांग — Pramanik Jain Panchang",
+  description:
+    "Authentic Digambara Jain Daily Panchang — tithi, nakshatra, yoga, karana, sunrise/sunset, muhurtas, choghadiya, kalyanaks, parvas, vrats. Computed using Swiss Ephemeris.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,8 +18,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               Panchang Tool
             </a>
             <div className="flex gap-4 text-sm">
-              <a href="/" className="text-gray-400 hover:text-orange-400">Generate</a>
-              <a href="/daily" className="text-gray-400 hover:text-orange-400">Daily Card</a>
+              <a href="/" className="text-gray-400 hover:text-orange-400">Daily Panchang</a>
+              <a href="/generate" className="text-gray-400 hover:text-orange-400">Generate Year</a>
               <a href="/events" className="text-gray-400 hover:text-orange-400">Events Master</a>
               <a href="/print-calendar" className="text-gray-400 hover:text-orange-400">Print Calendar</a>
             </div>

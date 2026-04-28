@@ -1,598 +1,839 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { getAllJainEvents } from "@/data/jain-events";
-import type { PanchangDay, EventSummary } from "@/lib/types";
-import type { JainEventCategory } from "@/data/jain-events";
+// Homepage — the daily panchang. Auto-detects location, supports number-style
+// (Western 123 / Devanagari १२३) and time-format (24h / 12h) preferences.
+// The full year/range generator is now at /generate.
 
-type GenMode = "year" | "range";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { toPng } from "html-to-image";
+import type { PanchangDay } from "@/lib/types";
+import {
+  type NumberStyle,
+  type TimeFormat,
+  formatNumberStr,
+  formatTimeStr,
+  formatTimeRange,
+  formatGregorianDate,
+} from "@/lib/display-format";
 
-const CATEGORY_OPTIONS: Array<{ key: JainEventCategory; label: string; defaultOn: boolean }> = [
-  { key: "panch_kalyanak", label: "Panch Kalyanak", defaultOn: true },
-  { key: "jain_parv", label: "Jain Parv", defaultOn: true },
-  { key: "vrat", label: "Vrat", defaultOn: true },
-  { key: "national", label: "National / Government", defaultOn: true },
-  { key: "acharya", label: "Acharya Darpan", defaultOn: false },
-  { key: "muhurt", label: "Muhurt", defaultOn: false },
-];
+// ─────────────────────────────────────────────────────────────────────────────
+// Cities
+// ─────────────────────────────────────────────────────────────────────────────
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+interface City {
+  name: string;
+  lat: number;
+  lng: number;
+  tz: number;
+}
 
-const LOCATIONS = [
-  { name: "Ujjain (Standard)", lat: 23.1765, lng: 75.7885, tz: 330 },
+const PRESET_CITIES: City[] = [
+  { name: "Indore", lat: 22.7196, lng: 75.8577, tz: 330 },
+  { name: "Ujjain", lat: 23.1765, lng: 75.7885, tz: 330 },
+  { name: "Bhopal", lat: 23.2599, lng: 77.4126, tz: 330 },
   { name: "Jaipur", lat: 26.9124, lng: 75.7873, tz: 330 },
-  { name: "Delhi", lat: 28.6139, lng: 77.2090, tz: 330 },
-  { name: "Mumbai", lat: 19.0760, lng: 72.8777, tz: 330 },
-  { name: "Sydney, Australia", lat: -33.8688, lng: 151.2093, tz: 660 },
-  { name: "Melbourne, Australia", lat: -37.8136, lng: 144.9631, tz: 660 },
-  { name: "London, UK", lat: 51.5074, lng: -0.1278, tz: 0 },
-  { name: "New York, USA", lat: 40.7128, lng: -74.0060, tz: -300 },
-  { name: "Custom", lat: 0, lng: 0, tz: 330 },
+  { name: "Delhi", lat: 28.6139, lng: 77.209, tz: 330 },
+  { name: "Mumbai", lat: 19.076, lng: 72.8777, tz: 330 },
+  { name: "Pune", lat: 18.5204, lng: 73.8567, tz: 330 },
+  { name: "Ahmedabad", lat: 23.0225, lng: 72.5714, tz: 330 },
+  { name: "Kolkata", lat: 22.5726, lng: 88.3639, tz: 330 },
+  { name: "Bangalore", lat: 12.9716, lng: 77.5946, tz: 330 },
+  { name: "Chennai", lat: 13.0827, lng: 80.2707, tz: 330 },
+  { name: "Hyderabad", lat: 17.385, lng: 78.4867, tz: 330 },
 ];
 
-export default function Home() {
-  const [genMode, setGenMode] = useState<GenMode>("year");
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [startMonth, setStartMonth] = useState(new Date().getMonth());
-  const [startYear, setStartYear] = useState(new Date().getFullYear());
-  const [rangeMonths, setRangeMonths] = useState(12); // how many months
-  const [locationIdx, setLocationIdx] = useState(0);
-  const [customLat, setCustomLat] = useState("23.1765");
-  const [customLng, setCustomLng] = useState("75.7885");
-  const [customTz, setCustomTz] = useState("330");
-  const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [panchangData, setPanchangData] = useState<PanchangDay[]>([]);
-  const [filterMonth, setFilterMonth] = useState<number>(-1); // -1 = all
-  const [filterEvents, setFilterEvents] = useState(false);
-  const [search, setSearch] = useState("");
-  const [editingIdx, setEditingIdx] = useState<number | null>(null);
-  const [exportCategories, setExportCategories] = useState<Set<JainEventCategory>>(
-    () => new Set(CATEGORY_OPTIONS.filter((c) => c.defaultOn).map((c) => c.key)),
-  );
+const DEFAULT_CITY: City = PRESET_CITIES[0]; // Indore
 
-  const toggleExportCategory = (key: JainEventCategory) => {
-    setExportCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+const DEFAULT_FOOTER = {
+  editor: "ब्रह्मचारी अनिल कुमार जैन",
+  organisation: "अधिष्ठाता अमर ग्रंथालय",
+  address: "श्री दिगम्बर जैन उदासीन आश्रम, 584 एम जी रोड, इन्दौर",
+  phone: "9770872087",
+};
 
-  // Produce a copy of panchangData with events filtered to the selected categories
-  const dataForExport = (): PanchangDay[] =>
-    panchangData.map((d) => ({
-      ...d,
-      todayEvents: d.todayEvents.filter((e) =>
-        exportCategories.has(e.category as JainEventCategory),
-      ),
-      upcomingEvents: d.upcomingEvents, // upcoming don't carry category; keep as-is
-    }));
+// ─────────────────────────────────────────────────────────────────────────────
+// Local storage helpers (SSR-safe)
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const handleGenerate = useCallback(async () => {
-    setGenerating(true);
-    setPanchangData([]);
+const LS = {
+  numberStyle: "pramanik.numberStyle",
+  timeFormat: "pramanik.timeFormat",
+  city: "pramanik.city",
+  autoDetectLocation: "pramanik.autoDetect",
+  footer: "pramanik.footer",
+};
 
-    let customEvents;
-    try {
-      const saved = localStorage.getItem("pramanik_jain_events");
-      customEvents = saved ? JSON.parse(saved) : undefined;
-    } catch {
-      customEvents = undefined;
+function readLS<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const v = localStorage.getItem(key);
+    if (v === null) return fallback;
+    return JSON.parse(v) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLS<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auto-location: try browser geolocation, find nearest preset city
+// ─────────────────────────────────────────────────────────────────────────────
+
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function nearestPresetCity(coords: { lat: number; lng: number }): City {
+  let best = PRESET_CITIES[0];
+  let bestKm = haversineKm(coords, best);
+  for (const c of PRESET_CITIES) {
+    const km = haversineKm(coords, c);
+    if (km < bestKm) {
+      bestKm = km;
+      best = c;
+    }
+  }
+  return best;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers for tithi headline ("वैशाख शुक्ल द्वादशी")
+// ─────────────────────────────────────────────────────────────────────────────
+
+function tithiHeadline(day: PanchangDay): string {
+  const month = day.hinduMonth.hi;
+  const paksha = day.tithi.pakshaHi.replace(" पक्ष", "");
+  const tithi = day.tithi.nameHi;
+  const adhika = day.masaIsAdhika ? " (अधिक)" : "";
+  return `${month}${adhika} ${paksha} ${tithi}`;
+}
+
+function todayLocalISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The page
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function HomePage() {
+  // Settings (loaded from localStorage on mount)
+  const [numberStyle, setNumberStyle] = useState<NumberStyle>("western");
+  const [timeFormat, setTimeFormat] = useState<TimeFormat>("12h");
+  const [city, setCity] = useState<City>(DEFAULT_CITY);
+  const [autoDetect, setAutoDetect] = useState(true);
+  const [footer, setFooter] = useState(DEFAULT_FOOTER);
+  const [date, setDate] = useState(todayLocalISO());
+  const [showSettings, setShowSettings] = useState(false);
+  const [editingFooter, setEditingFooter] = useState(false);
+
+  // Data
+  const [day, setDay] = useState<PanchangDay | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Restore settings from localStorage on mount
+  useEffect(() => {
+    setNumberStyle(readLS<NumberStyle>(LS.numberStyle, "western"));
+    setTimeFormat(readLS<TimeFormat>(LS.timeFormat, "12h"));
+    const savedAutoDetect = readLS<boolean>(LS.autoDetectLocation, true);
+    setAutoDetect(savedAutoDetect);
+    const savedCity = readLS<City | null>(LS.city, null);
+    if (savedCity) setCity(savedCity);
+    const savedFooter = readLS(LS.footer, DEFAULT_FOOTER);
+    setFooter(savedFooter);
+
+    // ?date=YYYY-MM-DD support so old /daily/<date> URLs still work via redirect.
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const qd = params.get("date");
+      if (qd && /^\d{4}-\d{2}-\d{2}$/.test(qd)) setDate(qd);
     }
 
-    const loc = LOCATIONS[locationIdx];
-    const lat = loc.name === "Custom" ? parseFloat(customLat) : loc.lat;
-    const lng = loc.name === "Custom" ? parseFloat(customLng) : loc.lng;
-    const tz = loc.name === "Custom" ? parseInt(customTz) : loc.tz;
-    const locConfig = { lat, lng, tz };
-
-    let body: Record<string, unknown>;
-    if (genMode === "range") {
-      let endMonth = startMonth + rangeMonths - 1;
-      let endYear = startYear;
-      while (endMonth > 11) { endMonth -= 12; endYear++; }
-      setProgress({ done: 0, total: rangeMonths * 30 });
-      body = {
-        mode: "range",
-        startMonth, startYear, endMonth, endYear,
-        location: locConfig,
-        customEvents,
-      };
-    } else {
-      setProgress({ done: 0, total: 365 });
-      body = {
-        mode: "year",
-        year,
-        location: locConfig,
-        customEvents,
-      };
-    }
-
-    let data: PanchangDay[];
-    try {
-      const res = await fetch("/api/panchang", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      // Handle both JSON and HTML/text error bodies (e.g., when the route itself crashes
-      // and Next falls back to an HTML error page).
-      const text = await res.text();
-      let json: { days?: PanchangDay[]; error?: string } = {};
-      try {
-        json = text ? JSON.parse(text) : {};
-      } catch {
-        json = { error: text.slice(0, 500) || `HTTP ${res.status} ${res.statusText}` };
-      }
-      if (!res.ok || json.error) {
-        alert("Failed to generate panchang: " + (json.error ?? `HTTP ${res.status}`));
-        setGenerating(false);
-        return;
-      }
-      data = (json.days ?? []) as PanchangDay[];
-      setProgress({ done: data.length, total: data.length });
-    } catch (e) {
-      alert("Network error generating panchang: " + (e instanceof Error ? e.message : String(e)));
-      setGenerating(false);
-      return;
-    }
-
-    setPanchangData(data);
-    localStorage.setItem("pramanik_panchang_data", JSON.stringify(data));
-    setGenerating(false);
-  }, [genMode, year, startMonth, startYear, rangeMonths, locationIdx, customLat, customLng, customTz]);
-
-  const handleDownloadJSON = () => {
-    const blob = new Blob([JSON.stringify(dataForExport(), null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `panchang-${year}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadCSV = () => {
-    const header = "Date,Day (Hi),Day (En),VNS Year,Tithi (Hi),Tithi (En),Paksha (Hi),Hindu Month (Hi),Start Time,End Time,Events\n";
-    const rows = dataForExport().map((d) =>
-      `${d.date},"${d.varaHi}","${d.varaEn}",${d.vnsYear},"${d.tithi.nameHi}","${d.tithi.nameEn}","${d.tithi.pakshaHi}","${d.hinduMonth.hi}","${d.tithi.startTime}","${d.tithi.endTime}","${d.todayEvents.map((e) => e.nameEn).join("; ")}"`
-    ).join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `panchang-${year}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // Add an event to a specific day
-  const addEventToDay = (dayIdx: number, event: EventSummary) => {
-    setPanchangData((prev) => {
-      const updated = [...prev];
-      const day = { ...updated[dayIdx] };
-      day.todayEvents = [...day.todayEvents, event];
-      updated[dayIdx] = day;
-      return updated;
-    });
-  };
-
-  // Remove an event from a specific day
-  const removeEventFromDay = (dayIdx: number, eventId: string) => {
-    setPanchangData((prev) => {
-      const updated = [...prev];
-      const day = { ...updated[dayIdx] };
-      day.todayEvents = day.todayEvents.filter((e) => e.eventId !== eventId);
-      updated[dayIdx] = day;
-      return updated;
-    });
-  };
-
-  // Filter data
-  const filteredData = panchangData.filter((d) => {
-    const date = new Date(d.date);
-    if (filterMonth >= 0 && date.getMonth() !== filterMonth) return false;
-    if (filterEvents && d.todayEvents.length === 0) return false;
-    if (search) {
-      const s = search.toLowerCase();
-      return (
-        d.date.includes(s) ||
-        d.varaHi.includes(s) ||
-        d.tithi.nameHi.includes(s) ||
-        d.tithi.nameEn.toLowerCase().includes(s) ||
-        d.hinduMonth.hi.includes(s) ||
-        d.hinduMonth.en.toLowerCase().includes(s) ||
-        d.todayEvents.some((e) => e.nameHi.includes(s) || e.nameEn.toLowerCase().includes(s))
+    // Try to auto-detect location if enabled and no manual city saved
+    if (savedAutoDetect && !savedCity && typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const detected = nearestPresetCity({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setCity(detected);
+          writeLS(LS.city, detected);
+        },
+        () => {
+          // permission denied or unavailable — silently keep default
+        },
+        { timeout: 5000, maximumAge: 1000 * 60 * 60 * 24 },
       );
     }
-    return true;
-  });
+  }, []);
 
-  const eventDays = panchangData.filter((d) => d.todayEvents.length > 0).length;
+  // Persist settings on change
+  useEffect(() => writeLS(LS.numberStyle, numberStyle), [numberStyle]);
+  useEffect(() => writeLS(LS.timeFormat, timeFormat), [timeFormat]);
+  useEffect(() => writeLS(LS.city, city), [city]);
+  useEffect(() => writeLS(LS.autoDetectLocation, autoDetect), [autoDetect]);
+  useEffect(() => writeLS(LS.footer, footer), [footer]);
+
+  // Fetch panchang whenever date or city changes
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const res = await fetch("/api/panchang", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "single",
+            date,
+            location: { lat: city.lat, lng: city.lng, tz: city.tz },
+          }),
+        });
+        const text = await res.text();
+        let json: { days?: PanchangDay[]; error?: string } = {};
+        try { json = text ? JSON.parse(text) : {}; }
+        catch { json = { error: text.slice(0, 500) || `HTTP ${res.status}` }; }
+        if (!res.ok || json.error) setError(json.error ?? `HTTP ${res.status}`);
+        else setDay(json.days?.[0] ?? null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [date, city]);
+
+  const requestGeolocation = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      alert("Browser geolocation is not available.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const detected = nearestPresetCity({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setCity(detected);
+        writeLS(LS.city, detected);
+        alert(`Location detected: nearest preset is ${detected.name}.`);
+      },
+      (err) => alert("Could not detect location: " + err.message),
+      { timeout: 8000 },
+    );
+  }, []);
+
+  const downloadPng = async () => {
+    if (!cardRef.current) return;
+    try {
+      const dataUrl = await toPng(cardRef.current, {
+        pixelRatio: 2.5,
+        backgroundColor: "#fff8e7",
+      });
+      const link = document.createElement("a");
+      link.download = `panchang-${date}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (e) {
+      alert("PNG export failed: " + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const fmtTime = (t: string | undefined | null) => formatTimeStr(t, timeFormat, numberStyle);
+  const fmtRange = (m: { start: string; end: string } | undefined | null) =>
+    m ? formatTimeRange(m.start, m.end, timeFormat, numberStyle) : "-";
+  const fmtNum = (n: string | number | null | undefined) => formatNumberStr(n, numberStyle);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-orange-500">Jain Panchang Generator</h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Compute tithi for every day of the year, auto-match Jain events, review and export.
-        </p>
-      </div>
-
-      {/* Generate Controls */}
-      <div className="rounded-xl border border-gray-800 bg-gray-900 p-6 space-y-4">
-        {/* Mode Toggle */}
-        <div className="flex gap-2">
-          <button onClick={() => setGenMode("year")}
-            className={`rounded-lg px-4 py-2 text-sm font-medium ${genMode === "year" ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400 border border-gray-700"}`}>
-            Full Year
-          </button>
-          <button onClick={() => setGenMode("range")}
-            className={`rounded-lg px-4 py-2 text-sm font-medium ${genMode === "range" ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400 border border-gray-700"}`}>
-            Custom Range
-          </button>
+    <div className="space-y-4">
+      {/* Top toolbar */}
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-800 bg-gray-900 p-3">
+        <div>
+          <label className="mb-0.5 block text-[10px] uppercase tracking-wide text-gray-500">Date</label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-100"
+          />
         </div>
-
-        <div className="flex items-end gap-4 flex-wrap">
-          {genMode === "year" ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-300">Year</label>
-              <select value={year} onChange={(e) => setYear(parseInt(e.target.value))}
-                className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
-                {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-300">Start Month</label>
-                <select value={startMonth} onChange={(e) => setStartMonth(parseInt(e.target.value))}
-                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
-                  {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-300">Start Year</label>
-                <select value={startYear} onChange={(e) => setStartYear(parseInt(e.target.value))}
-                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
-                  {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-300">Duration</label>
-                <select value={rangeMonths} onChange={(e) => setRangeMonths(parseInt(e.target.value))}
-                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
-                  {[1, 2, 3, 4, 6, 12].map((n) => (
-                    <option key={n} value={n}>{n} month{n > 1 ? "s" : ""}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="text-xs text-gray-500 pb-2">
-                {MONTHS[startMonth]} {startYear} → {MONTHS[(startMonth + rangeMonths - 1) % 12]} {startYear + Math.floor((startMonth + rangeMonths - 1) / 12)}
-              </div>
-            </>
-          )}
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-300">Location</label>
-            <select value={locationIdx} onChange={(e) => setLocationIdx(parseInt(e.target.value))}
-              className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
-              {LOCATIONS.map((loc, i) => (
-                <option key={loc.name} value={i}>{loc.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {LOCATIONS[locationIdx].name === "Custom" && (
-            <div className="flex gap-2">
-              <div>
-                <label className="mb-1 block text-[10px] text-gray-500">Lat</label>
-                <input type="text" value={customLat} onChange={(e) => setCustomLat(e.target.value)}
-                  className="w-20 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
-              </div>
-              <div>
-                <label className="mb-1 block text-[10px] text-gray-500">Lng</label>
-                <input type="text" value={customLng} onChange={(e) => setCustomLng(e.target.value)}
-                  className="w-20 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
-              </div>
-              <div>
-                <label className="mb-1 block text-[10px] text-gray-500">TZ</label>
-                <input type="text" value={customTz} onChange={(e) => setCustomTz(e.target.value)}
-                  className="w-16 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2.5 text-sm focus:border-orange-500 focus:outline-none" />
-              </div>
-            </div>
-          )}
-
-          <button onClick={handleGenerate} disabled={generating}
-            className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50">
-            {generating ? `Generating... ${progress.done}/${progress.total}` : "Generate Panchang"}
-          </button>
-        </div>{/* end flex items-end */}
-
-        {generating && (
-          <div className="flex-1">
-            <div className="h-2 rounded-full bg-gray-800">
-              <div
-                className="h-2 rounded-full bg-orange-500 transition-all"
-                style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {panchangData.length > 0 && !generating && (
-          <div className="flex flex-col gap-3 pt-2 border-t border-gray-800">
-            <div>
-              <div className="text-xs text-gray-400 mb-1.5">Categories to include in export:</div>
-              <div className="flex flex-wrap gap-3">
-                {CATEGORY_OPTIONS.map((cat) => (
-                  <label key={cat.key} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={exportCategories.has(cat.key)}
-                      onChange={() => toggleExportCategory(cat.key)}
-                      className="accent-orange-500"
-                    />
-                    {cat.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-2 ml-auto">
-              <button
-                onClick={handleDownloadJSON}
-                className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-300 hover:border-orange-500 hover:text-orange-400"
-              >
-                Download JSON
-              </button>
-              <button
-                onClick={handleDownloadCSV}
-                className="rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-300 hover:border-orange-500 hover:text-orange-400"
-              >
-                Download CSV
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Stats */}
-      {panchangData.length > 0 && (
-        <div className="flex gap-4">
-          <div className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 text-center">
-            <div className="text-2xl font-bold text-orange-500">{panchangData.length}</div>
-            <div className="text-xs text-gray-400">Total Days</div>
-          </div>
-          <div className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 text-center">
-            <div className="text-2xl font-bold text-green-400">{eventDays}</div>
-            <div className="text-xs text-gray-400">Event Days</div>
-          </div>
-          <div className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 text-center">
-            <div className="text-2xl font-bold text-blue-400">
-              {panchangData.reduce((sum, d) => sum + d.todayEvents.length, 0)}
-            </div>
-            <div className="text-xs text-gray-400">Total Event Matches</div>
-          </div>
-        </div>
-      )}
-
-      {/* Filters */}
-      {panchangData.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => setDate(todayLocalISO())}
+          className="rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-orange-400"
+        >
+          Today
+        </button>
+        <div>
+          <label className="mb-0.5 block text-[10px] uppercase tracking-wide text-gray-500">City</label>
           <select
-            value={filterMonth}
-            onChange={(e) => setFilterMonth(parseInt(e.target.value))}
-            className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+            value={city.name}
+            onChange={(e) => {
+              const c = PRESET_CITIES.find((p) => p.name === e.target.value);
+              if (c) setCity(c);
+            }}
+            className="rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-100"
           >
-            <option value={-1}>All Months</option>
-            {MONTHS.map((m, i) => (
-              <option key={m} value={i}>{m}</option>
+            {PRESET_CITIES.map((c) => (
+              <option key={c.name} value={c.name}>{c.name}</option>
             ))}
           </select>
+        </div>
+        <button
+          onClick={requestGeolocation}
+          title="Detect my location"
+          className="rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-orange-400"
+        >
+          📍 Detect
+        </button>
 
-          <label className="flex items-center gap-2 text-sm text-gray-300">
-            <input
-              type="checkbox"
-              checked={filterEvents}
-              onChange={(e) => setFilterEvents(e.target.checked)}
-              className="accent-orange-500"
-            />
-            Events only
-          </label>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setShowSettings((v) => !v)}
+            className="rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-orange-400"
+          >
+            ⚙ Settings
+          </button>
+          <button
+            onClick={downloadPng}
+            disabled={!day || loading}
+            className="rounded bg-orange-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+          >
+            ⬇ Download PNG
+          </button>
+        </div>
+      </div>
 
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tithi, event, month..."
-            className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none w-64"
-          />
-
-          <span className="text-xs text-gray-500">
-            Showing {filteredData.length} of {panchangData.length} days
-          </span>
+      {/* Settings panel */}
+      {showSettings && (
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-4 space-y-4">
+          <div>
+            <label className="mb-1 block text-[10px] uppercase tracking-wide text-gray-500">Number Style</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setNumberStyle("western")}
+                className={`rounded px-3 py-1.5 text-xs ${
+                  numberStyle === "western"
+                    ? "bg-orange-600 text-white"
+                    : "border border-gray-700 text-gray-300 hover:border-orange-500"
+                }`}
+              >
+                Western (1, 2, 3)
+              </button>
+              <button
+                onClick={() => setNumberStyle("devanagari")}
+                className={`rounded px-3 py-1.5 text-xs ${
+                  numberStyle === "devanagari"
+                    ? "bg-orange-600 text-white"
+                    : "border border-gray-700 text-gray-300 hover:border-orange-500"
+                }`}
+              >
+                देवनागरी (१, २, ३)
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] uppercase tracking-wide text-gray-500">Time Format</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTimeFormat("12h")}
+                className={`rounded px-3 py-1.5 text-xs ${
+                  timeFormat === "12h"
+                    ? "bg-orange-600 text-white"
+                    : "border border-gray-700 text-gray-300 hover:border-orange-500"
+                }`}
+              >
+                12-hour (AM/PM)
+              </button>
+              <button
+                onClick={() => setTimeFormat("24h")}
+                className={`rounded px-3 py-1.5 text-xs ${
+                  timeFormat === "24h"
+                    ? "bg-orange-600 text-white"
+                    : "border border-gray-700 text-gray-300 hover:border-orange-500"
+                }`}
+              >
+                24-hour
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-xs text-gray-300">
+              <input
+                type="checkbox"
+                checked={autoDetect}
+                onChange={(e) => setAutoDetect(e.target.checked)}
+                className="accent-orange-500"
+              />
+              Auto-detect my location on next visit (browser permission required)
+            </label>
+          </div>
+          <div className="border-t border-gray-800 pt-3">
+            <label className="mb-2 block text-[10px] uppercase tracking-wide text-gray-500">Card Footer</label>
+            {editingFooter ? (
+              <div className="space-y-2">
+                <input
+                  value={footer.editor}
+                  onChange={(e) => setFooter((f) => ({ ...f, editor: e.target.value }))}
+                  placeholder="Editor name"
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-100"
+                />
+                <input
+                  value={footer.organisation}
+                  onChange={(e) => setFooter((f) => ({ ...f, organisation: e.target.value }))}
+                  placeholder="Organisation"
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-100"
+                />
+                <input
+                  value={footer.address}
+                  onChange={(e) => setFooter((f) => ({ ...f, address: e.target.value }))}
+                  placeholder="Address"
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-100"
+                />
+                <input
+                  value={footer.phone}
+                  onChange={(e) => setFooter((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="Phone"
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-100"
+                />
+                <button
+                  onClick={() => setEditingFooter(false)}
+                  className="rounded bg-orange-600 px-3 py-1 text-xs text-white"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <span>{footer.editor} • {footer.phone}</span>
+                <button
+                  onClick={() => setEditingFooter(true)}
+                  className="rounded border border-gray-700 px-2 py-1 hover:border-orange-500"
+                >
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Calendar Table */}
-      {panchangData.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-gray-800">
-          <table className="w-full text-sm">
-            <thead className="border-b border-gray-800 bg-gray-900">
-              <tr>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-400 w-28">Date</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-400 w-20">Day</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-400 w-16">VNS</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-400 w-28">VNS Date</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-400">Tithi</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-400 w-24">Paksha</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-400 w-20">Month</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-400">Events</th>
-                <th className="px-3 py-2.5 text-right font-medium text-gray-400 w-16">Edit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800/50">
-              {filteredData.map((day) => {
-                const realIdx = panchangData.indexOf(day);
-                const hasEvents = day.todayEvents.length > 0;
-                return (
-                  <tr
-                    key={day.date}
-                    className={`transition-colors ${hasEvents ? "bg-orange-500/5" : "hover:bg-gray-900/50"}`}
-                  >
-                    <td className="px-3 py-2 font-mono text-xs">{day.date}</td>
-                    <td className="px-3 py-2">
-                      <div className="text-xs">{day.varaHi}</div>
-                      <div className="text-xs text-gray-500">{day.varaEn}</div>
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-400">{day.vnsYear}</td>
-                    <td className="px-3 py-2 text-xs">{day.vnsDateHi}</td>
-                    <td className="px-3 py-2">
-                      <div className="text-xs font-medium">{day.tithi.nameHi}</div>
-                      <div className="text-xs text-gray-500">{day.tithi.nameEn}</div>
-                      {day.kshayaTithi && (
-                        <div className="mt-0.5 text-[10px] text-yellow-400" title="Kshaya tithi — skipped, merged into this day">
-                          + क्षय: {day.kshayaTithi.nameHi} ({day.kshayaTithi.nameEn})
-                        </div>
-                      )}
-                      {day.isVriddhiRepeat && (
-                        <div className="mt-0.5 text-[10px] text-blue-400" title="Vriddhi — repeated tithi, events on prior day">
-                          वृद्धि (repeat)
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-xs">{day.tithi.pakshaHi}</td>
-                    <td className="px-3 py-2">
-                      <div className="text-xs">{day.hinduMonth.hi}</div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {day.todayEvents.map((evt) => (
-                          <span
-                            key={evt.eventId}
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-                            style={{
-                              backgroundColor: `${evt.colorTheme}20`,
-                              color: evt.colorTheme,
-                            }}
-                          >
-                            {evt.nameHi}
-                            <button
-                              onClick={() => removeEventFromDay(realIdx, evt.eventId)}
-                              className="ml-0.5 text-red-400 hover:text-red-300"
-                              title="Remove event"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                        {day.todayEvents.length === 0 && (
-                          <span className="text-xs text-gray-600">—</span>
-                        )}
+      {/* Loading / error states */}
+      {loading && (
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-12 text-center text-gray-500">
+          Loading panchang…
+        </div>
+      )}
+      {error && (
+        <div className="rounded-lg border border-red-700 bg-red-950/40 p-4 text-sm text-red-300">
+          Error: {error}
+        </div>
+      )}
+
+      {/* The card */}
+      {day && !loading && (
+        <div className="mx-auto" style={{ maxWidth: 680 }}>
+          <div
+            ref={cardRef}
+            className="font-serif text-gray-900"
+            style={{
+              background: "linear-gradient(180deg, #fff8e7 0%, #fff2d4 100%)",
+              border: "6px double #b8860b",
+              borderRadius: 12,
+              padding: 14,
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
+            {/* ── BANNER ── */}
+            <div
+              style={{
+                background: "linear-gradient(180deg, #8b1a1a 0%, #6d1414 100%)",
+                color: "#ffd700",
+                padding: "8px 12px",
+                borderRadius: 6,
+                textAlign: "center",
+                letterSpacing: 0.3,
+              }}
+            >
+              <div style={{ fontSize: 18, fontWeight: "bold" }}>
+                ॥ तीर्थंकर वर्धमान जैन पंचांग ॥
+              </div>
+              <div style={{ fontSize: 10, fontStyle: "italic", color: "#fff5b8", marginTop: 1 }}>
+                Pramanik Daily Panchang · {city.name}, India · {formatGregorianDate(day.date, numberStyle)} ({day.varaEn})
+              </div>
+            </div>
+
+            {/* ── HEADLINE: complete tithi ── */}
+            <div
+              style={{
+                marginTop: 8,
+                background: "linear-gradient(135deg, #fff8dc 0%, #ffd700 50%, #fff8dc 100%)",
+                border: "2px solid #b8860b",
+                borderRadius: 8,
+                padding: "10px 12px",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 11, color: "#5a3a0a", letterSpacing: 1 }}>आज की तिथि</div>
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: "bold",
+                  color: "#8b1a1a",
+                  lineHeight: 1.15,
+                  marginTop: 2,
+                }}
+              >
+                {tithiHeadline(day)}
+              </div>
+              <div style={{ fontSize: 11, color: "#5a3a0a", marginTop: 4 }}>
+                {day.varaHi} · वीर निर्वाण संवत् <strong>{fmtNum(day.samvats?.virNirvan)}</strong>
+                {" "}· महावीर जन्म संवत् <strong>{fmtNum(day.samvats?.mahavirJanma)}</strong>
+              </div>
+            </div>
+
+            {/* ── EVENTS HERO (kalyanaks/parvas/vrats) ── */}
+            <EventsHero day={day} />
+
+            {/* ── TWO-COLUMN PANCHANG ── */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+              <Card title="☀ पंचांग ☀" headerBg="#8b1a1a" headerFg="#ffd700">
+                <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+                  <tbody>
+                    <KV label="तिथि" value={day.tithi.nameHi} time={fmtTime(day.tithi.endTime)} />
+                    <KV label="नक्षत्र" value={day.nakshatra?.nameHi} time={fmtTime(day.nakshatra?.endTime)} />
+                    <KV label="योग" value={day.yoga?.nameHi} time={fmtTime(day.yoga?.endTime)} />
+                    <KV label="करण" value={day.karana?.nameHi} time={fmtTime(day.karana?.endTime)} />
+                    <KV label="वार" value={day.varaHi} />
+                    <KV label="आनंदादि" value={day.anandadiYoga?.nameHi} />
+                  </tbody>
+                </table>
+              </Card>
+              <Card title="☀ सूर्य एवं चन्द्र ☀" headerBg="#8b1a1a" headerFg="#ffd700">
+                <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+                  <tbody>
+                    <KV label="सूर्योदय" time={fmtTime(day.sunTimes?.sunrise)} />
+                    <KV label="सूर्यास्त" time={fmtTime(day.sunTimes?.sunset)} />
+                    <KV label="चन्द्रोदय" time={fmtTime(day.sunTimes?.moonrise)} />
+                    <KV label="चन्द्रास्त" time={fmtTime(day.sunTimes?.moonset)} />
+                    <KV label="चन्द्र राशि" value={day.moonRashi?.nameHi} />
+                    <KV label="सूर्य नक्षत्र" value={day.sunNakshatra?.nameHi} />
+                  </tbody>
+                </table>
+              </Card>
+            </div>
+
+            {/* ── COMPACT SAMVAT/MISC STRIP ── */}
+            <div
+              style={{
+                border: "1px solid #b8860b",
+                borderRadius: 6,
+                background: "#fff8e0",
+                padding: "5px 8px",
+                marginTop: 6,
+                fontSize: 10,
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                gap: 6,
+                lineHeight: 1.35,
+              }}
+            >
+              <div><strong style={{ color: "#8b1a1a" }}>विक्रम सं.</strong><br />{fmtNum(day.samvats?.vikram)}</div>
+              <div><strong style={{ color: "#8b1a1a" }}>शक सं.</strong><br />{fmtNum(day.samvats?.shaka)}</div>
+              <div><strong style={{ color: "#8b1a1a" }}>दिवस अवधि</strong><br />{fmtNum(day.dayDuration)}</div>
+              <div><strong style={{ color: "#8b1a1a" }}>ऋतु</strong><br />{day.ritu?.hi}</div>
+              <div><strong style={{ color: "#8b1a1a" }}>अयन</strong><br />{day.ayana?.hi}</div>
+              <div><strong style={{ color: "#8b1a1a" }}>माह (पूर्णि.)</strong><br />{day.hinduMonthPurnimanta?.hi}</div>
+              <div><strong style={{ color: "#8b1a1a" }}>माह (अमां.)</strong><br />{day.hinduMonthAmanta?.hi}</div>
+              <div><strong style={{ color: "#8b1a1a" }}>दिशा शूल</strong><br /><span style={{ color: "#6a1b9a", fontWeight: "bold" }}>{day.dishaShool?.directionHi}</span></div>
+            </div>
+
+            {/* ── MUHURTAS ── */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: 6, marginTop: 6 }}>
+              <Card title="✓ शुभ मुहूर्त ✓" headerBg="#1e7a1e" headerFg="#fff" border="#1e7a1e" body="#f0fff0">
+                <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse" }}>
+                  <tbody>
+                    <ShubhRow label="अभिजित" range={fmtRange(day.muhurtas?.abhijit)} />
+                    <ShubhRow label="ब्रह्म" range={fmtRange(day.muhurtas?.brahmaMuhurta)} />
+                  </tbody>
+                </table>
+              </Card>
+              <Card title="✗ अशुभ मुहूर्त ✗" headerBg="#b22222" headerFg="#fff" border="#b22222" body="#fff5f0">
+                <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse" }}>
+                  <tbody>
+                    <AshubhRow label="राहु काल" range={fmtRange(day.muhurtas?.rahuKalam)} />
+                    <AshubhRow label="यमगंड" range={fmtRange(day.muhurtas?.yamganda)} />
+                    <AshubhRow label="गुलिक काल" range={fmtRange(day.muhurtas?.gulikaKalam)} />
+                    <AshubhRow label="कुलिक" range={fmtRange(day.muhurtas?.kulik)} />
+                    <AshubhRow label="कालवेला" range={fmtRange(day.muhurtas?.kalvela)} />
+                  </tbody>
+                </table>
+              </Card>
+            </div>
+
+            {/* ── DAY CHOGHADIYA ── */}
+            {day.choghadiya && (
+              <div style={{ marginTop: 6, border: "1px solid #8b4513", borderRadius: 6, background: "#fffbf0" }}>
+                <div
+                  style={{
+                    background: "#8b4513",
+                    color: "#ffd700",
+                    textAlign: "center",
+                    padding: "3px 0",
+                    fontWeight: "bold",
+                    fontSize: 11,
+                    borderTopLeftRadius: 5,
+                    borderTopRightRadius: 5,
+                  }}
+                >
+                  🪔 दिन का चौघड़िया 🪔
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 0 }}>
+                  {day.choghadiya.day.map((seg, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        background: seg.type === "shubh" ? "#e8ffe8" : "#ffe8e8",
+                        borderRight: i % 4 === 3 ? "none" : "1px solid #e8c890",
+                        borderBottom: i < 4 ? "1px solid #e8c890" : "none",
+                        padding: "4px 4px",
+                        fontSize: 10,
+                        textAlign: "center",
+                      }}
+                    >
+                      <div style={{ fontWeight: "bold", color: seg.type === "shubh" ? "#1e7a1e" : "#b22222" }}>
+                        {seg.nameHi}
                       </div>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        onClick={() => setEditingIdx(editingIdx === realIdx ? null : realIdx)}
-                        className="rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-800 hover:text-orange-400"
-                      >
-                        {editingIdx === realIdx ? "Close" : "+Event"}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      <div style={{ fontFamily: "monospace", fontSize: 9, color: "#5a3a0a" }}>
+                        {fmtTime(seg.start)}–{fmtTime(seg.end)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-      {/* Quick Add Event Panel */}
-      {editingIdx !== null && panchangData[editingIdx] && (
-        <QuickAddEvent
-          day={panchangData[editingIdx]}
-          onAdd={(event) => {
-            addEventToDay(editingIdx, event);
-            setEditingIdx(null);
-          }}
-          onClose={() => setEditingIdx(null)}
-        />
+            {/* ── FOOTER ── */}
+            <div
+              style={{
+                marginTop: 8,
+                borderTop: "1px solid #b8860b",
+                paddingTop: 6,
+                fontSize: 10,
+                textAlign: "center",
+                color: "#5a3a0a",
+                lineHeight: 1.5,
+              }}
+            >
+              <div>संपादक — <strong>{footer.editor}</strong></div>
+              <div>{footer.organisation} · {footer.address}</div>
+              <div>📞 {footer.phone}</div>
+              <div style={{ marginTop: 4, fontWeight: "bold", color: "#8b1a1a", fontSize: 11 }}>॥ जय जिनेन्द्र ॥</div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-function QuickAddEvent({
-  day,
-  onAdd,
-  onClose,
-}: {
-  day: PanchangDay;
-  onAdd: (event: EventSummary) => void;
-  onClose: () => void;
-}) {
-  const allEvents = getAllJainEvents();
-  const [search, setSearch] = useState("");
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const filtered = allEvents.filter((e) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return e.nameHi.includes(s) || e.nameEn.toLowerCase().includes(s);
-  });
+function Card({
+  title,
+  headerBg,
+  headerFg,
+  border = "#b8860b",
+  body = "#fff8e0",
+  children,
+}: {
+  title: string;
+  headerBg: string;
+  headerFg: string;
+  border?: string;
+  body?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ border: `1px solid ${border}`, borderRadius: 6, background: body }}>
+      <div
+        style={{
+          background: headerBg,
+          color: headerFg,
+          textAlign: "center",
+          padding: "3px 0",
+          fontWeight: "bold",
+          fontSize: 12,
+          borderTopLeftRadius: 5,
+          borderTopRightRadius: 5,
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function KV({ label, value, time }: { label: string; value?: string | null; time?: string }) {
+  return (
+    <tr style={{ borderBottom: "1px dotted #d4af37" }}>
+      <td style={{ padding: "2px 6px", color: "#8b1a1a", fontWeight: "bold", whiteSpace: "nowrap" }}>{label}</td>
+      <td style={{ padding: "2px 6px", textAlign: "left" }}>{value || ""}</td>
+      <td style={{ padding: "2px 6px", textAlign: "right", fontFamily: "monospace", color: "#5a3a0a", fontSize: 9 }}>
+        {time || ""}
+      </td>
+    </tr>
+  );
+}
+
+function ShubhRow({ label, range }: { label: string; range: string }) {
+  return (
+    <tr style={{ borderBottom: "1px dotted #c0e0c0" }}>
+      <td style={{ padding: "2px 6px", color: "#1e7a1e", fontWeight: "bold" }}>{label}</td>
+      <td style={{ padding: "2px 6px", textAlign: "right", fontFamily: "monospace", fontSize: 9 }}>{range}</td>
+    </tr>
+  );
+}
+
+function AshubhRow({ label, range }: { label: string; range: string }) {
+  return (
+    <tr style={{ borderBottom: "1px dotted #f0c0c0" }}>
+      <td style={{ padding: "2px 6px", color: "#b22222", fontWeight: "bold", whiteSpace: "nowrap" }}>{label}</td>
+      <td style={{ padding: "2px 6px", textAlign: "right", fontFamily: "monospace", fontSize: 9 }}>{range}</td>
+    </tr>
+  );
+}
+
+const CATEGORY_META: Record<string, { labelHi: string; bg: string; fg: string; emoji: string }> = {
+  panch_kalyanak: { labelHi: "कल्याणक", bg: "#fff8dc", fg: "#8b1a1a", emoji: "🕉" },
+  jain_parv:      { labelHi: "पर्व",     bg: "#fff5e0", fg: "#c2410c", emoji: "🪔" },
+  vrat:           { labelHi: "व्रत",     bg: "#fff0f5", fg: "#9a1c5c", emoji: "🌸" },
+  national:       { labelHi: "अवकाश",   bg: "#e8f5ff", fg: "#1e3a8a", emoji: "🇮🇳" },
+  acharya:        { labelHi: "आचार्य",   bg: "#f0f8ff", fg: "#4b3a8a", emoji: "🕉" },
+  muhurt:         { labelHi: "मुहूर्त",   bg: "#fff8e0", fg: "#5c4a0a", emoji: "⏱" },
+};
+
+function EventsHero({ day }: { day: PanchangDay }) {
+  // Group seeded events by category, then inject ras tyag as a synthetic vrat row
+  // since "रस त्याग" is itself a daily vrat per Jain practice.
+  const grouped: Record<string, Array<{ key: string; label: string; sub?: string }>> = {};
+  for (const e of day.todayEvents || []) {
+    const cat = e.category || "jain_parv";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push({ key: e.eventId, label: e.nameHi });
+  }
+  if (day.rasTyag) {
+    if (!grouped.vrat) grouped.vrat = [];
+    grouped.vrat.push({
+      key: "ras-tyag",
+      label: `रस त्याग — ${day.rasTyag.rasHi} ${day.rasTyag.emoji}`,
+      sub: day.rasTyag.itemsHi,
+    });
+  }
+
+  const ORDER = ["panch_kalyanak", "jain_parv", "vrat", "national", "acharya", "muhurt"];
+  const ordered = ORDER.filter((c) => grouped[c]);
+
+  if (ordered.length === 0) {
+    return (
+      <div
+        style={{
+          marginTop: 6,
+          padding: "6px 10px",
+          background: "#fff8e0",
+          border: "1px dashed #d4af37",
+          borderRadius: 6,
+          fontSize: 11,
+          textAlign: "center",
+          color: "#8b6e0a",
+          fontStyle: "italic",
+        }}
+      >
+        ॥ आज कोई विशेष पर्व/व्रत/कल्याणक नहीं है ॥
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-bold text-orange-500">Add Event to {day.date}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">&times;</button>
-        </div>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search event..."
-          className="mb-3 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
-          autoFocus
-        />
-        <div className="space-y-1 max-h-96 overflow-y-auto">
-          {filtered.slice(0, 50).map((e) => (
-            <button
-              key={e.id}
-              onClick={() =>
-                onAdd({
-                  eventId: e.id,
-                  nameHi: e.nameHi,
-                  nameEn: e.nameEn,
-                  category: e.category,
-                  colorTheme: e.colorTheme,
-                })
-              }
-              className="flex w-full items-center justify-between rounded-lg border border-gray-800 px-3 py-2 text-left text-sm hover:border-orange-500/50 hover:bg-gray-800"
-            >
-              <div>
-                <div className="font-medium">{e.nameHi}</div>
-                <div className="text-xs text-gray-400">{e.nameEn}</div>
-              </div>
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px]"
-                style={{ backgroundColor: `${e.colorTheme}20`, color: e.colorTheme }}
+    <div
+      style={{
+        marginTop: 8,
+        background: "linear-gradient(135deg, #fff8dc 0%, #fff2c8 50%, #fff8dc 100%)",
+        border: "2px solid #d4af37",
+        borderRadius: 8,
+        padding: "8px 10px",
+        boxShadow: "inset 0 0 0 1px #ffe080",
+      }}
+    >
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 11,
+          fontWeight: "bold",
+          color: "#8b1a1a",
+          letterSpacing: 1,
+          marginBottom: 6,
+        }}
+      >
+        ✦ ✦ ✦ आज का विशेष ✦ ✦ ✦
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        {ordered.map((cat) => {
+          const meta = CATEGORY_META[cat] || CATEGORY_META.jain_parv;
+          const items = grouped[cat];
+          return (
+            <div key={cat} style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+              <div
+                style={{
+                  background: meta.fg,
+                  color: "#fff",
+                  fontSize: 9,
+                  fontWeight: "bold",
+                  padding: "2px 6px",
+                  borderRadius: 10,
+                  whiteSpace: "nowrap",
+                  minWidth: 56,
+                  textAlign: "center",
+                  marginTop: 1,
+                }}
               >
-                {e.category === "panch_kalyanak" ? "PK" : "Parv"}
-              </span>
-            </button>
-          ))}
-        </div>
+                {meta.emoji} {meta.labelHi}
+              </div>
+              <div style={{ flex: 1, fontSize: 13, lineHeight: 1.45, color: meta.fg, fontWeight: 600 }}>
+                {items.map((it, i) => (
+                  <span key={it.key}>
+                    {i > 0 && <span style={{ color: "#aaa", margin: "0 4px" }}>•</span>}
+                    {it.label}
+                    {it.sub && (
+                      <span style={{ color: "#777", fontWeight: 400, fontSize: 11 }}>
+                        {" "}
+                        ({it.sub})
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

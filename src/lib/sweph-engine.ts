@@ -11,6 +11,7 @@ import {
   KARANA_NAMES_HI, RITU_HI, AYANA_HI, RASHI_NAMES_HI,
   type JainEvent,
 } from "@/data/jain-events";
+import { RAS_TYAG_BY_VARA } from "./ras-tyag";
 import type { PanchangDay, EventSummary, UpcomingEvent, SpecialYogaPeriod } from "./types";
 
 const C = sweph.constants;
@@ -779,6 +780,7 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     anandadiYoga: anandadi,
     dayDuration,
     samvats,
+    rasTyag: RAS_TYAG_BY_VARA[vara],
   };
   return day;
 }
