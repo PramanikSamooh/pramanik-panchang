@@ -73,7 +73,7 @@ export default function EventsPage() {
   const withRules = events.filter((e) => e.hinduMonth && e.hinduTithi > 0).length;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-orange-500">Jain Events Master</h1>

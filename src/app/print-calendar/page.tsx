@@ -140,8 +140,8 @@ export default function PrintCalendarPage() {
     return (
       <div className="text-center py-20">
         <h2 className="text-xl font-bold text-orange-500 mb-2">No Panchang Data</h2>
-        <p className="text-gray-400 mb-4">Generate panchang data first from the home page.</p>
-        <a href="/" className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">Go to Generator</a>
+        <p className="text-gray-400 mb-4">Generate panchang data first from the Generate page.</p>
+        <a href="/generate" className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">Go to Generator</a>
       </div>
     );
   }
@@ -151,7 +151,7 @@ export default function PrintCalendarPage() {
   const hasImage = showImages && monthImages[selectedMonthKey];
 
   return (
-    <>
+    <div className="mx-auto max-w-7xl px-4 py-4">
       {/* ── Screen Controls (hidden in print) ── */}
       <div className="no-print space-y-5 mb-6">
         <div className="flex items-center justify-between">
@@ -532,6 +532,6 @@ export default function PrintCalendarPage() {
           .calendar-page { border: 1px solid #374151; }
         }
       `}</style>
-    </>
+    </div>
   );
 }

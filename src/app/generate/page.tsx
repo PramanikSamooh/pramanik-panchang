@@ -216,7 +216,7 @@ export default function Home() {
   const eventDays = panchangData.filter((d) => d.todayEvents.length > 0).length;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-orange-500">Jain Panchang Generator</h1>
