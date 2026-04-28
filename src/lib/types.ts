@@ -115,6 +115,34 @@ export interface PanchangDay {
   tithiPravritti?: { nameHi: string; nameEn: string };
   /** Planetary lord of the first hora at sunrise (Sun/Moon/Mars/etc.) */
   horaLordSunrise?: { planetEn: string; planetHi: string };
+
+  // ── Sequences (multiple values if they transition during the day) ──
+  /** Karanas that touch the civil day, in order, with end times. */
+  karanaSequence?: Array<{ nameHi: string; nameEn: string; endTime: string }>;
+  /** Yogas that touch the civil day, in order, with end times. */
+  yogaSequence?: Array<{ number: number; nameHi: string; nameEn: string; endTime: string }>;
+
+  // ── Lagna at sunrise (rising sign / udaya lagna) ──
+  lagnaAtSunrise?: { number: number; nameHi: string; nameEn: string };
+
+  // ── Vara Shoola — separate from Disha Shool; different direction system ──
+  varaShoola?: { direction: string; directionHi: string };
+
+  // ── Extra muhurtas (Godhuli, Vijaya, Sandhya — common in regional panchangs) ──
+  extraMuhurtas?: {
+    vijaya?: { start: string; end: string };       // 11th muhurta of day, victorious
+    godhuli?: { start: string; end: string };      // 24 min around sunset, twilight
+    pratahSandhya?: { start: string; end: string }; // dawn twilight
+    sayahnaSandhya?: { start: string; end: string }; // dusk twilight
+    nishitaKaal?: { start: string; end: string };   // midnight muhurta
+  };
+
+  // ── Tomorrow preview — mini panchang for the next day ──
+  tomorrow?: {
+    date: string;
+    varaHi: string;
+    tithiHeadlineHi: string; // e.g. "वैशाख शुक्ल त्रयोदशी"
+  };
 }
 
 // ── Phase B (reserved — shipped in subsequent release) ──

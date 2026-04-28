@@ -308,6 +308,53 @@ function karanaEndTime(referenceInstant: Date): Date | null {
   return findCrossing(referenceInstant, fwd, target, moonMinusSun);
 }
 
+/** All karanas that touch the civil window [start, end]. */
+function karanasInWindow(start: Date, end: Date): Array<{ name: string; endTime: Date }> {
+  const out: Array<{ name: string; endTime: Date }> = [];
+  let cursor = start;
+  while (cursor.getTime() < end.getTime()) {
+    const cur = karanaInfoAt(cursor);
+    const endT = karanaEndTime(cursor) ?? end;
+    out.push({ name: cur.name, endTime: endT });
+    cursor = new Date(endT.getTime() + 60_000); // step past the boundary
+    if (out.length > 6) break; // safety
+  }
+  return out;
+}
+
+/** All yogas that touch the civil window [start, end]. */
+function yogasInWindow(start: Date, end: Date): Array<{ index: number; endTime: Date }> {
+  const out: Array<{ index: number; endTime: Date }> = [];
+  let cursor = start;
+  while (cursor.getTime() < end.getTime()) {
+    const idx = yogaAt(cursor);
+    const endT = yogaEndTime(cursor) ?? end;
+    out.push({ index: idx, endTime: endT });
+    cursor = new Date(endT.getTime() + 60_000);
+    if (out.length > 4) break;
+  }
+  return out;
+}
+
+/** Lagna (rising sign / udaya lagna) at a given instant for the observer's location.
+ * sweph.houses returns the tropical ascendant in `data.points[0]`. We subtract the ayanamsa
+ * to convert to sidereal, then divide by 30 to get the rashi index 0..11 (Mesha = 0). */
+function lagnaAt(date: Date, lat: number, lng: number): number {
+  try {
+    const jd = dateToJD(date);
+    const r = sweph.houses(jd, lat, lng, "P");
+    const ascTropical = r.data.points[0];
+    if (typeof ascTropical !== "number") return 0;
+    const ayan = sweph.get_ayanamsa(jd);
+    let ascSid = ascTropical - ayan;
+    while (ascSid < 0) ascSid += 360;
+    while (ascSid >= 360) ascSid -= 360;
+    return Math.floor(ascSid / 30);
+  } catch {
+    return 0;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Hindu month (Purnimanta + Amanta both)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -470,6 +517,51 @@ function computeMuhurtas(
   };
 }
 
+/** Extra named muhurtas: Vijaya, Godhuli, Pratah/Sayahna Sandhya, Nishita Kaal. */
+function computeExtraMuhurtas(
+  sunrise: Date, sunset: Date, nextSunrise: Date | null, tz: number,
+): NonNullable<PanchangDay["extraMuhurtas"]> {
+  const dayMs = sunset.getTime() - sunrise.getTime();
+  const fifteenth = dayMs / 15;
+
+  // Vijaya: 11th muhurta of the day (idx 10)
+  const vijayaStart = new Date(sunrise.getTime() + 10 * fifteenth);
+  const vijayaEnd = new Date(sunrise.getTime() + 11 * fifteenth);
+
+  // Pratah Sandhya: ±12 min around sunrise
+  const pratahStart = new Date(sunrise.getTime() - 12 * 60_000);
+  const pratahEnd = new Date(sunrise.getTime() + 12 * 60_000);
+
+  // Sayahna Sandhya: ±12 min around sunset
+  const sayahnaStart = new Date(sunset.getTime() - 12 * 60_000);
+  const sayahnaEnd = new Date(sunset.getTime() + 12 * 60_000);
+
+  // Godhuli: ~24 min starting at sunset (cow-gathering twilight)
+  const godhuliStart = sunset;
+  const godhuliEnd = new Date(sunset.getTime() + 24 * 60_000);
+
+  // Nishita: midnight ± 24 min, where solar midnight is the midpoint of sunset → next sunrise.
+  // If we don't know next sunrise, fall back to civil midnight.
+  let nishitaStart: Date;
+  let nishitaEnd: Date;
+  if (nextSunrise) {
+    const midnight = new Date((sunset.getTime() + nextSunrise.getTime()) / 2);
+    nishitaStart = new Date(midnight.getTime() - 24 * 60_000);
+    nishitaEnd = new Date(midnight.getTime() + 24 * 60_000);
+  } else {
+    nishitaStart = new Date(sunset.getTime() + 5 * 3600_000);
+    nishitaEnd = new Date(nishitaStart.getTime() + 48 * 60_000);
+  }
+
+  return {
+    vijaya: { start: formatTime(vijayaStart, tz), end: formatTime(vijayaEnd, tz) },
+    godhuli: { start: formatTime(godhuliStart, tz), end: formatTime(godhuliEnd, tz) },
+    pratahSandhya: { start: formatTime(pratahStart, tz), end: formatTime(pratahEnd, tz) },
+    sayahnaSandhya: { start: formatTime(sayahnaStart, tz), end: formatTime(sayahnaEnd, tz) },
+    nishitaKaal: { start: formatTime(nishitaStart, tz), end: formatTime(nishitaEnd, tz) },
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Choghadiya — 8 day segments + 8 night segments
 // ─────────────────────────────────────────────────────────────────────────────
@@ -549,6 +641,18 @@ const DISHA_SHOOL: Record<number, { en: string; hi: string }> = {
   4: { en: "South", hi: "दक्षिण" },
   5: { en: "West", hi: "पश्चिम" },
   6: { en: "East", hi: "पूर्व" },
+};
+
+// Vara Shoola — direction-to-face when starting an activity (Muhurta Chintamani convention).
+// Distinct from Disha Shool (which is direction-to-avoid for travel).
+const VARA_SHOOLA: Record<number, { en: string; hi: string }> = {
+  0: { en: "South-East", hi: "आग्नेय" },
+  1: { en: "South-West", hi: "नैऋत्य" },
+  2: { en: "North-West", hi: "वायव्य" },
+  3: { en: "North",      hi: "उत्तर" },
+  4: { en: "North-East", hi: "ईशान्य" },
+  5: { en: "West",       hi: "पश्चिम" },
+  6: { en: "East",       hi: "पूर्व" },
 };
 
 // ── Tithi pravritti (5-cycle naming): Nanda 1/6/11, Bhadra 2/7/12, Jaya 3/8/13, Rikta 4/9/14, Purna 5/10/15
@@ -730,11 +834,40 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   const { sunrise: nextSunrise } = sunRiseSet(tomorrowMidnight, loc);
   const choghadiya = nextSunrise ? computeChoghadiya(sunrise, sunset, nextSunrise, vara, loc.tz) : undefined;
 
+  // Extra muhurtas (Vijaya, Godhuli, Sandhya, Nishita)
+  const extraMuhurtas = computeExtraMuhurtas(sunrise, sunset, nextSunrise, loc.tz);
+
+  // Karana / yoga sequences for the civil day (sunrise → next sunrise)
+  const dayEnd = nextSunrise ?? new Date(sunrise.getTime() + DAY_MS);
+  const karanaSequence = karanasInWindow(sunrise, dayEnd).map((k) => ({
+    nameHi: KARANA_NAMES_HI[k.name] || k.name,
+    nameEn: k.name,
+    endTime: formatTime(k.endTime, loc.tz),
+  }));
+  const yogaSequence = yogasInWindow(sunrise, dayEnd).map((y) => {
+    const yi = Math.min(Math.max(y.index - 1, 0), 26);
+    return {
+      number: y.index,
+      nameHi: YOGA_NAMES_HI[yi] || "",
+      nameEn: YOGA_NAMES_EN[yi] || "",
+      endTime: formatTime(y.endTime, loc.tz),
+    };
+  });
+
+  // Lagna (rising sign) at sunrise
+  const lagnaIdx = lagnaAt(sunrise, loc.lat, loc.lng);
+  const lagna = {
+    number: lagnaIdx + 1,
+    nameHi: RASHI_NAMES_HI[lagnaIdx] || "",
+    nameEn: RASHI_EN[lagnaIdx] || "",
+  };
+
   // Anandadi yoga
   const anandadi = computeAnandadiYoga(naksRaw, vara);
 
-  // Disha shool
+  // Disha shool + Vara shoola
   const dishaShool = DISHA_SHOOL[vara];
+  const varaShoola = VARA_SHOOLA[vara];
 
   // Day duration
   const dayDuration = formatDuration(sunset.getTime() - sunrise.getTime());
@@ -820,8 +953,36 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     nakshatraPada: nakshatraPadaAt(sunrise),
     tithiPravritti: tithiPravrittiOf(tithiInPaksha),
     horaLordSunrise: { planetEn: VARA_LORD[vara].en, planetHi: VARA_LORD[vara].hi },
+    karanaSequence,
+    yogaSequence,
+    lagnaAtSunrise: lagna,
+    varaShoola: { direction: varaShoola.en, directionHi: varaShoola.hi },
+    extraMuhurtas,
   };
   return day;
+}
+
+/** Lightweight tomorrow preview — just vara + tithi headline. Not the full panchang.
+ * Used for the "कल" pill on page 5 of the daily widget. */
+function computeTomorrowPreview(date: Date, loc: LocationConfig): NonNullable<PanchangDay["tomorrow"]> | null {
+  const tomorrow = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+  const { sunrise } = sunRiseSet(tomorrow, loc);
+  if (!sunrise) return null;
+  const ref = new Date(sunrise.getTime() + SIX_GHATI_MS);
+  const ut = udayaTithiInfo(ref);
+  const tithiInPaksha = ut.paksha === "Shukla" ? ut.tithi : ut.tithi - 15;
+  const tithiIdx = Math.min(Math.max(tithiInPaksha - 1, 0), 14);
+  const tithi15 = tithiInPaksha === 15 ? getTithi15Name(ut.paksha) : null;
+  const tithiName = tithi15 ? tithi15.hi : (TITHI_NAMES_HI[tithiIdx] || `तिथि ${tithiInPaksha}`);
+  const masaPIdx = masaIndexPurnimanta(ref);
+  const masaName = HINDU_MONTHS.find((m) => m.en === MASA_NAMES_EN[masaPIdx])?.hi || MASA_NAMES_EN[masaPIdx];
+  const pakshaHi = ut.paksha === "Shukla" ? "शुक्ल" : "कृष्ण";
+  const local = new Date(tomorrow.getTime() + loc.tz * 60 * 1000);
+  return {
+    date: formatDateStr(tomorrow, loc.tz),
+    varaHi: VARA_HI[local.getUTCDay()],
+    tithiHeadlineHi: `${masaName} ${pakshaHi} ${tithiName}`,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1011,6 +1172,25 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
       }
     }
     allDays[i].upcomingEvents = upcoming;
+  }
+
+  // Tomorrow preview — pull straight from the next day in the generated window when possible,
+  // else compute it on the fly.
+  for (let i = 0; i < allDays.length; i++) {
+    const day = allDays[i];
+    const next = allDays[i + 1];
+    if (next) {
+      day.tomorrow = {
+        date: next.date,
+        varaHi: next.varaHi,
+        tithiHeadlineHi: `${next.hinduMonth.hi}${next.masaIsAdhika ? " (अधिक)" : ""} ${next.tithi.pakshaHi.replace(" पक्ष", "")} ${next.tithi.nameHi}`,
+      };
+    } else {
+      const [y, m, d] = day.date.split("-").map(Number);
+      const todayDate = new Date(y, m - 1, d);
+      const preview = computeTomorrowPreview(todayDate, location);
+      if (preview) day.tomorrow = preview;
+    }
   }
 
   return allDays;

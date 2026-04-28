@@ -42,6 +42,7 @@ const LS = {
   numberStyle: "pramanik.numberStyle",
   timeFormat: "pramanik.timeFormat",
   city: "pramanik.city",
+  showEnglish: "pramanik.showEnglish",
 };
 function readLS<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -104,6 +105,7 @@ export default function PanchangWidget({
   const [city, setCity] = useState<City>(DEFAULT_CITY);
   const [numberStyle, setNumberStyle] = useState<NumberStyle>("western");
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("12h");
+  const [showEnglish, setShowEnglish] = useState(false);
   const [pageIdx, setPageIdx] = useState(0);
   const [loading, setLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -113,12 +115,14 @@ export default function PanchangWidget({
   useEffect(() => {
     setNumberStyle(readLS<NumberStyle>(LS.numberStyle, "western"));
     setTimeFormat(readLS<TimeFormat>(LS.timeFormat, "12h"));
+    setShowEnglish(readLS<boolean>(LS.showEnglish, false));
     const savedCity = readLS<City | null>(LS.city, null);
     if (savedCity) setCity(savedCity);
   }, []);
   useEffect(() => writeLS(LS.numberStyle, numberStyle), [numberStyle]);
   useEffect(() => writeLS(LS.timeFormat, timeFormat), [timeFormat]);
   useEffect(() => writeLS(LS.city, city), [city]);
+  useEffect(() => writeLS(LS.showEnglish, showEnglish), [showEnglish]);
 
   // ── Re-fetch when date or city changes (skip the very first pass — server gave us initialDay)
   const firstFetchRef = useRef(true);
@@ -245,6 +249,17 @@ export default function PanchangWidget({
   const fmtRange = (m: { start: string; end: string } | undefined | null) =>
     m ? formatTimeRange(m.start, m.end, timeFormat, numberStyle) : "—";
   const fmtNum = (n: string | number | null | undefined) => formatNumberStr(n, numberStyle);
+  /** Render a Hindi entity name; if `showEnglish`, append a subtle English subtitle. */
+  const fmtBi = (hi: string | null | undefined, en: string | null | undefined): React.ReactNode => {
+    if (!hi) return en || "";
+    if (!showEnglish || !en) return hi;
+    return (
+      <span className="inline-flex flex-col items-end leading-tight">
+        <span>{hi}</span>
+        <span className="text-[11px] font-normal text-stone-500">{en}</span>
+      </span>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-amber-100 text-stone-900">
@@ -292,10 +307,10 @@ export default function PanchangWidget({
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {pageIdx === 0 && <Page1Essentials day={day} city={city} fmtTime={fmtTime} fmtNum={fmtNum} />}
+        {pageIdx === 0 && <Page1Essentials day={day} city={city} fmtTime={fmtTime} fmtNum={fmtNum} fmtBi={fmtBi} />}
         {pageIdx === 1 && <Page2Muhurtas day={day} fmtRange={fmtRange} />}
         {pageIdx === 2 && <Page3Choghadiya day={day} fmtTime={fmtTime} />}
-        {pageIdx === 3 && <Page4Astronomical day={day} fmtTime={fmtTime} fmtNum={fmtNum} />}
+        {pageIdx === 3 && <Page4Astronomical day={day} fmtTime={fmtTime} fmtNum={fmtNum} fmtBi={fmtBi} />}
         {pageIdx === 4 && <Page5Calendar day={day} fmtNum={fmtNum} />}
       </main>
 
@@ -344,6 +359,8 @@ export default function PanchangWidget({
           setNumberStyle={setNumberStyle}
           timeFormat={timeFormat}
           setTimeFormat={setTimeFormat}
+          showEnglish={showEnglish}
+          setShowEnglish={setShowEnglish}
           city={city}
           setCity={setCity}
           onDetectLocation={() => {
@@ -418,13 +435,16 @@ function Pill({ label, value, accent = "#8b1a1a" }: { label: string; value: Reac
 // ─── PAGE 1 — ESSENTIALS ─────────────────────────────────────────────────────
 
 function Page1Essentials({
-  day, city, fmtTime, fmtNum,
+  day, city, fmtTime, fmtNum, fmtBi,
 }: {
   day: PanchangDay;
   city: City;
   fmtTime: (t: string | undefined | null) => string;
   fmtNum: (n: string | number | null | undefined) => string;
+  fmtBi: (hi: string | null | undefined, en: string | null | undefined) => React.ReactNode;
 }) {
+  // fmtBi is used to surface English subtitle when the user enables it in Settings
+  void fmtBi;
   return (
     <div>
       {/* Compact banner with city + Gregorian date inline */}
@@ -441,6 +461,21 @@ function Page1Essentials({
         <div className="mt-1 text-[26px] font-bold leading-tight text-red-900">
           {day.hinduMonth.hi}{day.masaIsAdhika && <span className="text-[18px]"> (अधिक)</span>} {day.tithi.pakshaHi.replace(" पक्ष", "")} {day.tithi.nameHi}
         </div>
+        {/* Kshaya / vriddhi tags directly under the headline so they're not missed */}
+        {(day.kshayaTithi || day.isVriddhiRepeat) && (
+          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5">
+            {day.kshayaTithi && (
+              <span className="rounded-full bg-amber-700 px-2.5 py-0.5 text-[12px] font-bold text-white">
+                + क्षय तिथि: {day.kshayaTithi.nameHi}
+              </span>
+            )}
+            {day.isVriddhiRepeat && (
+              <span className="rounded-full bg-blue-700 px-2.5 py-0.5 text-[12px] font-bold text-white">
+                वृद्धि (पुनरावृत्ति)
+              </span>
+            )}
+          </div>
+        )}
         <div className="mt-1.5 text-[16px] font-bold text-stone-800">{day.varaHi}</div>
         <div className="mt-2 grid grid-cols-2 gap-2 text-[13px] text-stone-700">
           <div className="rounded bg-white/70 px-2 py-1.5">
@@ -484,7 +519,12 @@ function Page2Muhurtas({
 
       <Section title="✓ शुभ मुहूर्त" accent="#1e7a1e">
         <Row label="अभिजित" time={fmtRange(day.muhurtas?.abhijit)} accent="#1e7a1e" />
+        <Row label="विजय" time={fmtRange(day.extraMuhurtas?.vijaya)} accent="#1e7a1e" />
         <Row label="ब्रह्म मुहूर्त" time={fmtRange(day.muhurtas?.brahmaMuhurta)} accent="#1e7a1e" />
+        <Row label="गोधूलि" time={fmtRange(day.extraMuhurtas?.godhuli)} accent="#1e7a1e" />
+        <Row label="प्रातः सन्ध्या" time={fmtRange(day.extraMuhurtas?.pratahSandhya)} accent="#1e7a1e" />
+        <Row label="सायं सन्ध्या" time={fmtRange(day.extraMuhurtas?.sayahnaSandhya)} accent="#1e7a1e" />
+        <Row label="निशीथ काल" time={fmtRange(day.extraMuhurtas?.nishitaKaal)} accent="#1e7a1e" />
         <Row label="आनंदादि योग" value={day.anandadiYoga ? `${day.anandadiYoga.nameHi} (${day.anandadiYoga.type === "shubh" ? "शुभ" : "अशुभ"})` : "—"} accent="#1e7a1e" />
       </Section>
 
@@ -580,40 +620,72 @@ function ChoghadiyaGrid({
 // ─── PAGE 4 — ASTRONOMICAL DETAIL ────────────────────────────────────────────
 
 function Page4Astronomical({
-  day, fmtTime, fmtNum,
+  day, fmtTime, fmtNum, fmtBi,
 }: {
   day: PanchangDay;
   fmtTime: (t: string | undefined | null) => string;
   fmtNum: (n: string | number | null | undefined) => string;
+  fmtBi: (hi: string | null | undefined, en: string | null | undefined) => React.ReactNode;
 }) {
   return (
     <div>
       <PageHeader titleHi="खगोलीय विवरण" subtitle="योग · करण · पाद · होरा · राशि · पंचक/भद्रा/मूल" />
 
-      <Section title="योग एवं करण" accent="#7c2d12">
-        <Row label="योग" value={`${day.yoga?.nameHi} (${fmtNum(day.yoga?.number)})`} time={fmtTime(day.yoga?.endTime)} accent="#7c2d12" />
-        <Row label="करण" value={day.karana?.nameHi} time={fmtTime(day.karana?.endTime)} accent="#7c2d12" />
+      <Section title="योग एवं करण क्रम" accent="#7c2d12">
+        {/* Yoga sequence — show all yogas active during the day with their end times */}
+        {day.yogaSequence && day.yogaSequence.length > 0 ? (
+          day.yogaSequence.map((y, i) => (
+            <Row
+              key={`y-${i}`}
+              label={i === 0 ? "योग" : "→ अगला योग"}
+              value={fmtBi(`${y.nameHi} (${fmtNum(y.number)})`, y.nameEn)}
+              time={fmtTime(y.endTime)}
+              accent="#7c2d12"
+            />
+          ))
+        ) : (
+          <Row label="योग" value={fmtBi(day.yoga?.nameHi, day.yoga?.nameEn)} time={fmtTime(day.yoga?.endTime)} accent="#7c2d12" />
+        )}
+        {/* Karana sequence — usually 2-3 karanas per day */}
+        {day.karanaSequence && day.karanaSequence.length > 0 ? (
+          day.karanaSequence.map((k, i) => (
+            <Row
+              key={`k-${i}`}
+              label={i === 0 ? "करण" : "→ अगला करण"}
+              value={fmtBi(k.nameHi, k.nameEn)}
+              time={fmtTime(k.endTime)}
+              accent="#7c2d12"
+            />
+          ))
+        ) : (
+          <Row label="करण" value={fmtBi(day.karana?.nameHi, day.karana?.nameEn)} time={fmtTime(day.karana?.endTime)} accent="#7c2d12" />
+        )}
         <Row label="नक्षत्र पाद" value={day.nakshatraPada ? `${fmtNum(day.nakshatraPada)}/4` : "—"} accent="#7c2d12" />
-        <Row label="तिथि प्रवृत्ति" value={day.tithiPravritti?.nameHi} accent="#7c2d12" />
-        <Row label="सूर्योदय होरा स्वामी" value={day.horaLordSunrise?.planetHi} accent="#7c2d12" />
+        <Row label="तिथि प्रवृत्ति" value={fmtBi(day.tithiPravritti?.nameHi, day.tithiPravritti?.nameEn)} accent="#7c2d12" />
+      </Section>
+
+      <Section title="लग्न · होरा · वार शूल" accent="#5b21b6">
+        <Row label="उदय लग्न" value={fmtBi(day.lagnaAtSunrise?.nameHi, day.lagnaAtSunrise?.nameEn)} accent="#5b21b6" />
+        <Row label="सूर्योदय होरा स्वामी" value={fmtBi(day.horaLordSunrise?.planetHi, day.horaLordSunrise?.planetEn)} accent="#5b21b6" />
+        <Row label="वार शूल (दिशा)" value={fmtBi(day.varaShoola?.directionHi, day.varaShoola?.direction)} accent="#5b21b6" />
       </Section>
 
       <Section title="राशि एवं नक्षत्र" accent="#1e3a8a">
         <Row
           label="चन्द्र राशि"
-          value={day.moonRashi?.nameHi}
+          value={fmtBi(day.moonRashi?.nameHi, day.moonRashi?.nameEn)}
           time={day.moonRashi?.entryTime ? `प्रवेश ${fmtTime(day.moonRashi.entryTime)}` : undefined}
           accent="#1e3a8a"
         />
         <Row
           label="सूर्य राशि"
-          value={day.sunRashi?.nameHi}
+          value={fmtBi(day.sunRashi?.nameHi, day.sunRashi?.nameEn)}
           time={day.sunRashi?.entryTime ? `प्रवेश ${fmtTime(day.sunRashi.entryTime)}` : undefined}
           accent="#1e3a8a"
         />
         <Row
           label="सूर्य नक्षत्र"
-          value={day.sunNakshatra?.nameHi}
+          value={fmtBi(day.sunNakshatra?.nameHi, day.sunNakshatra?.nameEn)}
           time={day.sunNakshatra?.entryTime ? `प्रवेश ${fmtTime(day.sunNakshatra.entryTime)}` : undefined}
           accent="#1e3a8a"
         />
@@ -663,6 +735,25 @@ function Page5Calendar({
   return (
     <div>
       <PageHeader titleHi="संवत् एवं काल" subtitle="समय व्यवस्था एवं आगामी पर्व" />
+
+      {/* Tomorrow preview — small "कल" pill so users can plan ahead */}
+      {day.tomorrow && (
+        <div className="mb-2.5 rounded-xl border border-teal-300 bg-teal-50 px-3 py-2.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-teal-800">कल · Tomorrow</div>
+              <div className="text-[16px] font-bold leading-tight text-teal-900">{day.tomorrow.tithiHeadlineHi}</div>
+              <div className="text-[13px] font-medium text-teal-700">{day.tomorrow.varaHi}</div>
+            </div>
+            <a
+              href={`/d/${day.tomorrow.date}`}
+              className="rounded-full bg-teal-600 px-3 py-1.5 text-[12px] font-semibold text-white active:bg-teal-700"
+            >
+              देखें →
+            </a>
+          </div>
+        </div>
+      )}
 
       <Section title="संवत्" accent="#8b1a1a">
         <div className="grid grid-cols-2 gap-2">
@@ -778,12 +869,15 @@ function EventsHero({ day }: { day: PanchangDay }) {
 
 function SettingsModal({
   numberStyle, setNumberStyle, timeFormat, setTimeFormat,
+  showEnglish, setShowEnglish,
   city, setCity, onDetectLocation, onClose,
 }: {
   numberStyle: NumberStyle;
   setNumberStyle: (v: NumberStyle) => void;
   timeFormat: TimeFormat;
   setTimeFormat: (v: TimeFormat) => void;
+  showEnglish: boolean;
+  setShowEnglish: (v: boolean) => void;
   city: City;
   setCity: (c: City) => void;
   onDetectLocation: () => void;
@@ -832,6 +926,22 @@ function SettingsModal({
                 className={`flex-1 rounded-lg py-2 text-xs ${timeFormat === "24h" ? "bg-orange-600 text-white" : "border border-stone-300 text-stone-700"}`}
               >24-hour</button>
             </div>
+          </div>
+
+          {/* English name subtitle toggle */}
+          <div>
+            <label className="flex items-center justify-between gap-2 rounded-lg border border-stone-300 px-3 py-2.5">
+              <span>
+                <span className="block text-[12px] font-semibold text-stone-800">English names</span>
+                <span className="block text-[10px] text-stone-500">Show English under Hindi (e.g., रोहिणी / Rohini)</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={showEnglish}
+                onChange={(e) => setShowEnglish(e.target.checked)}
+                className="h-5 w-5 accent-orange-600"
+              />
+            </label>
           </div>
 
           {/* City */}
