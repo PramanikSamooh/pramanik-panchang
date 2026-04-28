@@ -177,20 +177,48 @@ export default function PanchangWidget({
   }, [next, prev]);
 
   // ── Share button (Web Share API + clipboard fallback)
+  // Builds a compact, reader-friendly message: tithi headline + first kalyanak/parv/vrat names,
+  // then the URL on its own line. WhatsApp's preview renders the URL as a rich card via OG tags.
+  const buildShareMessage = (url: string): string => {
+    const lines: string[] = [];
+    lines.push(`॥ ${tithiHeadline(day)} ॥`);
+    lines.push(`${day.varaHi} · ${formatGregorianDate(day.date, numberStyle)}`);
+    // Highlight kalyanaks/parvs/vrats prominently if present
+    const kal = day.todayEvents?.filter((e) => e.category === "panch_kalyanak") ?? [];
+    const parv = day.todayEvents?.filter((e) => e.category === "jain_parv") ?? [];
+    const vrat = day.todayEvents?.filter((e) => e.category === "vrat") ?? [];
+    if (kal.length) lines.push(`🕉 कल्याणक: ${kal.map((e) => e.nameHi).join(", ")}`);
+    if (parv.length) lines.push(`🪔 पर्व: ${parv.map((e) => e.nameHi).join(", ")}`);
+    if (vrat.length) lines.push(`🌸 व्रत: ${vrat.map((e) => e.nameHi).join(", ")}`);
+    if (day.rasTyag) lines.push(`रस त्याग: ${day.rasTyag.rasHi} ${day.rasTyag.emoji}`);
+    lines.push("");
+    lines.push(url);
+    return lines.join("\n");
+  };
+
   const onShare = async () => {
     if (typeof window === "undefined") return;
-    const url = window.location.href;
-    const title = `${tithiHeadline(day)} — तीर्थंकर वर्धमान जैन पंचांग`;
-    const text = `${title}\n${day.varaHi} · ${formatGregorianDate(day.date, numberStyle)}\n${url}`;
-    if (typeof navigator !== "undefined" && (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share) {
+    // If the viewer is on today's date, share the universal /d/today link so the recipient
+    // also sees today's panchang whenever they open it. Otherwise share the specific date URL.
+    const isToday = date === todayLocalISO();
+    const origin = window.location.origin;
+    const url = isToday ? `${origin}/d/today` : `${origin}/d/${date}`;
+    const message = buildShareMessage(url);
+
+    // Web Share API: pass message in `text`, drop the separate `url` so WhatsApp doesn't append
+    // the URL twice (once from text, once from url).
+    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+    if (typeof nav.share === "function") {
       try {
-        await navigator.share({ title, text, url });
+        await nav.share({ title: tithiHeadline(day), text: message });
         return;
-      } catch { /* user cancelled — fall through to clipboard */ }
+      } catch {
+        /* user cancelled — fall through to clipboard */
+      }
     }
     try {
-      await navigator.clipboard.writeText(url);
-      setShareToast("लिंक कॉपी हो गया · Link copied!");
+      await navigator.clipboard.writeText(message);
+      setShareToast("कॉपी हो गया — WhatsApp में पेस्ट करें · Copied!");
       setTimeout(() => setShareToast(null), 2500);
     } catch {
       setShareToast("Could not copy. Long-press the address bar to share.");
@@ -222,36 +250,36 @@ export default function PanchangWidget({
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-amber-100 text-stone-900">
       {/* ── HEADER ── */}
       <header className="sticky top-[49px] z-30 border-b border-amber-300 bg-amber-50/95 backdrop-blur">
-        <div className="mx-auto flex max-w-md items-center gap-2 px-3 py-2">
+        <div className="mx-auto flex max-w-md items-center gap-1.5 px-2 py-2">
           <button
             onClick={() => shiftDay(-1)}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-stone-800 active:bg-amber-300"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-200 text-lg font-bold text-stone-800 active:bg-amber-300"
             aria-label="Previous day"
           >‹</button>
           <input
             type="date"
             value={date}
             onChange={(e) => goToDate(e.target.value)}
-            className="flex-1 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-center text-xs font-medium text-stone-800"
+            className="flex-1 rounded-full border border-amber-300 bg-white px-2 py-1.5 text-center text-[14px] font-medium text-stone-800"
           />
           <button
             onClick={() => shiftDay(1)}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-stone-800 active:bg-amber-300"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-200 text-lg font-bold text-stone-800 active:bg-amber-300"
             aria-label="Next day"
           >›</button>
           <button
             onClick={() => goToDate(todayLocalISO())}
-            className="rounded-full bg-amber-200 px-2.5 py-1.5 text-[10px] font-bold text-stone-800 active:bg-amber-300"
+            className="rounded-full bg-amber-200 px-3 py-1.5 text-[13px] font-bold text-stone-800 active:bg-amber-300"
             aria-label="Today"
           >आज</button>
           <button
             onClick={onShare}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-600 text-white active:bg-orange-700"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-base text-white active:bg-orange-700"
             aria-label="Share"
           >↗</button>
           <button
             onClick={() => setSettingsOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-200 text-stone-700 active:bg-stone-300"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-200 text-base text-stone-700 active:bg-stone-300"
             aria-label="Settings"
           >⚙</button>
         </div>
@@ -260,7 +288,7 @@ export default function PanchangWidget({
 
       {/* ── PAGES ── */}
       <main
-        className="relative mx-auto max-w-md px-3 pb-24 pt-3"
+        className="relative mx-auto max-w-md px-2.5 pb-20 pt-2.5"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
@@ -280,7 +308,7 @@ export default function PanchangWidget({
             className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-200 text-stone-800 active:bg-amber-300 disabled:opacity-30"
           >‹</button>
           <div className="flex flex-1 flex-col items-center">
-            <div className="text-[11px] font-bold text-stone-800">{PAGE_TITLES[pageIdx].hi}</div>
+            <div className="text-[13px] font-bold text-stone-800">{PAGE_TITLES[pageIdx].hi}</div>
             <div className="mt-1.5 flex gap-1.5">
               {PAGE_TITLES.map((_, i) => (
                 <button
@@ -343,9 +371,9 @@ export default function PanchangWidget({
 
 function PageHeader({ titleHi, subtitle }: { titleHi: string; subtitle?: string }) {
   return (
-    <div className="mb-3 text-center">
-      <h2 className="text-base font-bold tracking-wide text-stone-700">{titleHi}</h2>
-      {subtitle && <div className="text-[10px] text-stone-500">{subtitle}</div>}
+    <div className="mb-2.5 text-center">
+      <h2 className="text-lg font-bold tracking-wide text-stone-800">{titleHi}</h2>
+      {subtitle && <div className="text-[12px] text-stone-600">{subtitle}</div>}
     </div>
   );
 }
@@ -354,9 +382,9 @@ function Section({
   title, accent = "#8b1a1a", children,
 }: { title: string; accent?: string; children: React.ReactNode }) {
   return (
-    <section className="mb-3 overflow-hidden rounded-xl border border-amber-300 bg-white/70 shadow-sm">
+    <section className="mb-2.5 overflow-hidden rounded-xl border border-amber-300 bg-white shadow-sm">
       <div
-        className="px-3 py-1.5 text-center text-[11px] font-bold tracking-wide text-white"
+        className="px-3 py-2 text-center text-[14px] font-bold tracking-wide text-white"
         style={{ background: accent }}
       >
         {title}
@@ -368,11 +396,11 @@ function Section({
 
 function Row({ label, value, time, accent = "#8b1a1a" }: { label: string; value?: React.ReactNode; time?: string; accent?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 border-b border-dashed border-amber-200 py-1.5 last:border-0">
-      <span className="text-xs font-bold" style={{ color: accent }}>{label}</span>
+    <div className="flex items-baseline justify-between gap-2 border-b border-dashed border-amber-200 py-2 last:border-0">
+      <span className="text-[15px] font-bold" style={{ color: accent }}>{label}</span>
       <span className="flex items-baseline gap-2 text-right">
-        {value && <span className="text-sm text-stone-800">{value}</span>}
-        {time && <span className="font-mono text-[11px] text-stone-500">{time}</span>}
+        {value && <span className="text-[16px] font-medium text-stone-800">{value}</span>}
+        {time && <span className="font-mono text-[14px] text-stone-600">{time}</span>}
       </span>
     </div>
   );
@@ -380,9 +408,9 @@ function Row({ label, value, time, accent = "#8b1a1a" }: { label: string; value?
 
 function Pill({ label, value, accent = "#8b1a1a" }: { label: string; value: React.ReactNode; accent?: string }) {
   return (
-    <div className="rounded-lg bg-amber-50 px-2.5 py-1.5">
-      <div className="text-[9px] uppercase tracking-wide" style={{ color: accent }}>{label}</div>
-      <div className="text-sm font-bold text-stone-800">{value}</div>
+    <div className="rounded-lg bg-amber-50 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent }}>{label}</div>
+      <div className="mt-0.5 text-[18px] font-bold text-stone-800">{value}</div>
     </div>
   );
 }
@@ -399,44 +427,38 @@ function Page1Essentials({
 }) {
   return (
     <div>
-      {/* Banner */}
-      <div className="rounded-xl bg-gradient-to-b from-red-800 to-red-900 px-4 py-3 text-center text-amber-300">
+      {/* Compact banner with city + Gregorian date inline */}
+      <div className="rounded-xl bg-gradient-to-b from-red-800 to-red-900 px-3 py-2 text-center text-amber-300">
         <div className="text-[15px] font-bold">॥ तीर्थंकर वर्धमान जैन पंचांग ॥</div>
-        <div className="text-[10px] italic text-amber-200/80">
-          {city.name} · {formatGregorianDate(day.date, "western")} · {day.varaEn}
+        <div className="text-[12px] text-amber-200/90">
+          {city.name} · {formatGregorianDate(day.date, "western")}
         </div>
       </div>
 
-      {/* Headline tithi */}
-      <div className="mt-3 rounded-2xl border-2 border-amber-500 bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-100 px-4 py-4 text-center shadow-md">
-        <div className="text-[10px] font-medium uppercase tracking-widest text-stone-600">आज की तिथि</div>
-        <div className="mt-1 text-2xl font-bold leading-tight text-red-900">
-          {day.hinduMonth.hi}
-          {day.masaIsAdhika && <span className="text-base"> (अधिक)</span>}{" "}
-          {day.tithi.pakshaHi.replace(" पक्ष", "")}
-          <br />
-          {day.tithi.nameHi}
+      {/* Headline tithi — large + readable */}
+      <div className="mt-2.5 rounded-2xl border-2 border-amber-500 bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-100 px-3 py-3 text-center shadow-md">
+        <div className="text-[12px] font-semibold uppercase tracking-wider text-stone-700">आज की तिथि</div>
+        <div className="mt-1 text-[26px] font-bold leading-tight text-red-900">
+          {day.hinduMonth.hi}{day.masaIsAdhika && <span className="text-[18px]"> (अधिक)</span>} {day.tithi.pakshaHi.replace(" पक्ष", "")} {day.tithi.nameHi}
         </div>
-        <div className="mt-2 text-[11px] text-stone-700">
-          <strong>{day.varaHi}</strong>
-        </div>
-        <div className="mt-1 grid grid-cols-2 gap-2 text-[10px] text-stone-700">
-          <div className="rounded bg-white/60 px-2 py-1">
-            <span className="font-bold text-red-900">वीर निर्वाण सं.</span>
-            <br />{fmtNum(day.samvats?.virNirvan)}
+        <div className="mt-1.5 text-[16px] font-bold text-stone-800">{day.varaHi}</div>
+        <div className="mt-2 grid grid-cols-2 gap-2 text-[13px] text-stone-700">
+          <div className="rounded bg-white/70 px-2 py-1.5">
+            <span className="block text-[11px] font-semibold text-red-900">वीर निर्वाण संवत्</span>
+            <span className="text-[18px] font-bold text-stone-900">{fmtNum(day.samvats?.virNirvan)}</span>
           </div>
-          <div className="rounded bg-white/60 px-2 py-1">
-            <span className="font-bold text-red-900">महावीर जन्म सं.</span>
-            <br />{fmtNum(day.samvats?.mahavirJanma)}
+          <div className="rounded bg-white/70 px-2 py-1.5">
+            <span className="block text-[11px] font-semibold text-red-900">महावीर जन्म संवत्</span>
+            <span className="text-[18px] font-bold text-stone-900">{fmtNum(day.samvats?.mahavirJanma)}</span>
           </div>
         </div>
       </div>
 
-      {/* Events hero */}
+      {/* Events hero — bigger */}
       <EventsHero day={day} />
 
-      {/* Sun/Moon basics */}
-      <Section title="सूर्य एवं चन्द्र">
+      {/* Sun/Moon — 2x2 pill grid */}
+      <Section title="🌅 सूर्य एवं चन्द्र">
         <div className="grid grid-cols-2 gap-2">
           <Pill label="सूर्योदय" value={fmtTime(day.sunTimes?.sunrise)} />
           <Pill label="सूर्यास्त" value={fmtTime(day.sunTimes?.sunset)} />
@@ -444,18 +466,6 @@ function Page1Essentials({
           <Pill label="चन्द्रास्त" value={fmtTime(day.sunTimes?.moonset) || "—"} />
         </div>
       </Section>
-
-      {/* Tithi/Nakshatra/Yoga end times */}
-      <Section title="पंचांग संक्षेप">
-        <Row label="तिथि" value={day.tithi.nameHi} time={fmtTime(day.tithi.endTime)} />
-        <Row label="नक्षत्र" value={day.nakshatra?.nameHi} time={fmtTime(day.nakshatra?.endTime)} />
-        <Row label="योग" value={day.yoga?.nameHi} time={fmtTime(day.yoga?.endTime)} />
-        <Row label="करण" value={day.karana?.nameHi} time={fmtTime(day.karana?.endTime)} />
-      </Section>
-
-      <div className="mt-4 text-center text-[10px] text-stone-500">
-        ← आगे शुभ-अशुभ मुहूर्त के लिए स्वाइप करें →
-      </div>
     </div>
   );
 }
@@ -489,19 +499,19 @@ function Page2Muhurtas({
       </Section>
 
       <Section title="दिशा शूल" accent="#6a1b9a">
-        <div className="py-2 text-center">
-          <div className="text-2xl font-bold text-purple-800">{day.dishaShool?.directionHi}</div>
-          <div className="text-[10px] text-stone-500">आज इस दिशा में यात्रा वर्जित</div>
+        <div className="py-1 text-center">
+          <div className="text-[26px] font-bold text-purple-800">{day.dishaShool?.directionHi}</div>
+          <div className="text-[12px] text-stone-600">आज इस दिशा में यात्रा वर्जित</div>
         </div>
       </Section>
 
       {day.specialYogas && day.specialYogas.length > 0 && (
         <Section title="आज सक्रिय विशेष योग" accent="#5b21b6">
-          <ul className="space-y-1.5">
+          <ul>
             {day.specialYogas.map((sy, i) => (
-              <li key={i} className="flex items-center justify-between text-xs">
-                <span className="font-bold text-stone-700">{sy.nameHi}</span>
-                <span className="font-mono text-[10px] text-stone-500">{sy.startTime}–{sy.endTime}</span>
+              <li key={i} className="flex items-center justify-between border-b border-dashed border-amber-200 py-1.5 text-[14px] last:border-0">
+                <span className="font-bold text-stone-800">{sy.nameHi}</span>
+                <span className="font-mono text-[12px] text-stone-600">{sy.startTime}–{sy.endTime}</span>
               </li>
             ))}
           </ul>
@@ -526,13 +536,9 @@ function Page3Choghadiya({ day, fmtTime }: { day: PanchangDay; fmtTime: (t: stri
         <ChoghadiyaGrid segments={day.choghadiya?.night || []} fmtTime={fmtTime} />
       </Section>
 
-      <div className="rounded-lg bg-amber-100 p-2.5 text-[10px] text-stone-600">
-        <div className="font-bold text-stone-700">सूचना:</div>
-        <ul className="ml-3 mt-1 list-disc space-y-0.5">
-          <li>अमृत, शुभ, लाभ — शुभ चौघड़िया</li>
-          <li>काल, रोग, उद्वेग — अशुभ चौघड़िया</li>
-          <li>चल — मध्यम / यात्रा हेतु शुभ</li>
-        </ul>
+      <div className="rounded-lg bg-amber-100 p-2 text-center text-[12px] text-stone-700">
+        <span className="font-bold">शुभ:</span> अमृत · शुभ · लाभ &nbsp;·&nbsp;
+        <span className="font-bold">अशुभ:</span> काल · रोग · उद्वेग
       </div>
     </div>
   );
@@ -544,25 +550,25 @@ function ChoghadiyaGrid({
   segments: NonNullable<PanchangDay["choghadiya"]>["day"];
   fmtTime: (t: string | undefined | null) => string;
 }) {
-  if (!segments.length) return <div className="py-2 text-center text-xs text-stone-500">—</div>;
+  if (!segments.length) return <div className="py-2 text-center text-sm text-stone-500">—</div>;
   return (
-    <div className="grid grid-cols-2 gap-1.5">
+    <div className="grid grid-cols-2 gap-2">
       {segments.map((seg, i) => (
         <div
           key={i}
-          className="rounded-md border px-2 py-1.5 text-center"
+          className="rounded-lg border-2 px-2 py-1.5 text-center"
           style={{
             borderColor: seg.type === "shubh" ? "#86efac" : "#fca5a5",
             background: seg.type === "shubh" ? "#f0fdf4" : "#fef2f2",
           }}
         >
           <div
-            className="text-xs font-bold"
+            className="text-[15px] font-bold"
             style={{ color: seg.type === "shubh" ? "#166534" : "#991b1b" }}
           >
             {seg.nameHi}
           </div>
-          <div className="font-mono text-[9px] text-stone-500">
+          <div className="font-mono text-[12px] text-stone-600">
             {fmtTime(seg.start)}–{fmtTime(seg.end)}
           </div>
         </div>
@@ -626,7 +632,7 @@ function Page4Astronomical({
               <span className="rounded bg-rose-100 px-2 py-0.5 text-rose-800">
                 सक्रिय
                 {day.bhadra.periods && day.bhadra.periods.length > 0 && (
-                  <span className="ml-1 text-[10px]">
+                  <span className="ml-1 text-[13px]">
                     ({day.bhadra.periods.map((p) => `${fmtTime(p.startTime)}–${fmtTime(p.endTime)}`).join(", ")})
                   </span>
                 )}
@@ -642,14 +648,6 @@ function Page4Astronomical({
         />
       </Section>
 
-      <div className="rounded-lg bg-amber-100 p-2.5 text-[10px] text-stone-600">
-        <div className="font-bold text-stone-700">परिचय:</div>
-        <ul className="ml-3 mt-1 list-disc space-y-0.5">
-          <li><b>नक्षत्र पाद</b>: नक्षत्र के 4 भागों में से वर्तमान भाग</li>
-          <li><b>तिथि प्रवृत्ति</b>: नन्दा (1,6,11) · भद्रा (2,7,12) · जया (3,8,13) · रिक्ता (4,9,14) · पूर्णा (5,10,15)</li>
-          <li><b>होरा स्वामी</b>: सूर्योदय के समय का ग्रह स्वामी</li>
-        </ul>
-      </div>
     </div>
   );
 }
@@ -686,22 +684,21 @@ function Page5Calendar({
 
       {day.upcomingEvents && day.upcomingEvents.length > 0 && (
         <Section title="आगामी पर्व (30 दिन)" accent="#0f766e">
-          <ul className="space-y-1">
-            {day.upcomingEvents.slice(0, 12).map((e, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-2 border-b border-dashed border-amber-200 py-1 last:border-0">
-                <span className="text-xs text-stone-700">{e.nameHi}</span>
-                <span className="font-mono text-[10px] text-stone-500">{e.date}</span>
+          <ul>
+            {day.upcomingEvents.slice(0, 8).map((e, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-2 border-b border-dashed border-amber-200 py-1.5 last:border-0">
+                <span className="text-[15px] text-stone-800">{e.nameHi}</span>
+                <span className="font-mono text-[13px] text-stone-600">{e.date}</span>
               </li>
             ))}
           </ul>
         </Section>
       )}
 
-      <div className="mt-2 rounded-lg bg-stone-100 p-3 text-center text-[11px] text-stone-600">
+      <div className="mt-2 rounded-lg bg-stone-100 p-2.5 text-center text-[13px] text-stone-700">
         <div>संपादक — <b>ब्रह्मचारी अनिल कुमार जैन</b></div>
-        <div>अधिष्ठाता अमर ग्रंथालय</div>
-        <div>श्री दिगम्बर जैन उदासीन आश्रम, इन्दौर</div>
-        <div className="mt-1 font-bold text-red-900">॥ जय जिनेन्द्र ॥</div>
+        <div className="text-[12px] text-stone-600">अधिष्ठाता अमर ग्रंथालय, इन्दौर</div>
+        <div className="mt-1 text-[14px] font-bold text-red-900">॥ जय जिनेन्द्र ॥</div>
       </div>
     </div>
   );
@@ -737,14 +734,14 @@ function EventsHero({ day }: { day: PanchangDay }) {
   const ordered = ORDER.filter((c) => grouped[c]);
   if (ordered.length === 0) {
     return (
-      <div className="mt-3 rounded-xl border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-center text-xs italic text-stone-600">
+      <div className="mt-2.5 rounded-xl border border-dashed border-amber-300 bg-amber-50 px-4 py-2.5 text-center text-[14px] italic text-stone-600">
         आज कोई विशेष पर्व/व्रत/कल्याणक नहीं है
       </div>
     );
   }
   return (
-    <div className="mt-3 rounded-2xl border-2 border-amber-400 bg-gradient-to-br from-yellow-50 to-amber-100 p-3 shadow-md">
-      <div className="mb-2 text-center text-[11px] font-bold uppercase tracking-widest text-red-900">
+    <div className="mt-2.5 rounded-2xl border-2 border-amber-400 bg-gradient-to-br from-yellow-50 to-amber-100 p-3 shadow-md">
+      <div className="mb-2 text-center text-[13px] font-bold uppercase tracking-widest text-red-900">
         ✦ आज का विशेष ✦
       </div>
       <div className="space-y-2">
@@ -753,18 +750,18 @@ function EventsHero({ day }: { day: PanchangDay }) {
           return (
             <div key={cat} className="flex items-start gap-2">
               <span
-                className="mt-0.5 inline-block min-w-[60px] rounded-full px-2 py-0.5 text-center text-[9px] font-bold text-white"
+                className="mt-0.5 inline-block min-w-[64px] rounded-full px-2 py-1 text-center text-[11px] font-bold text-white"
                 style={{ background: meta.fg }}
               >
                 {meta.emoji} {meta.labelHi}
               </span>
-              <div className="flex-1 text-sm font-semibold leading-snug" style={{ color: meta.fg }}>
+              <div className="flex-1 text-[16px] font-semibold leading-snug" style={{ color: meta.fg }}>
                 {grouped[cat].map((it, i) => (
                   <span key={it.key}>
                     {i > 0 && <span className="mx-1 text-stone-400">•</span>}
                     {it.label}
                     {it.sub && (
-                      <span className="text-[10px] font-normal text-stone-500"> ({it.sub})</span>
+                      <span className="text-[12px] font-normal text-stone-500"> ({it.sub})</span>
                     )}
                   </span>
                 ))}
