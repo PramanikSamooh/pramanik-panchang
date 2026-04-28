@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { PanchangDay } from "@/lib/types";
+import { type NumberStyle, formatNumberStr } from "@/lib/display-format";
+
+const NUMBER_STYLE_LS = "pramanik.numberStyle";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -44,6 +47,16 @@ export default function PrintCalendarPage() {
   const [showImages, setShowImages] = useState(false);
   const [monthImages, setMonthImages] = useState<Record<string, string>>({}); // keyed by "2026-04"
 
+  // Number style — shared with the homepage via the same localStorage key.
+  const [numberStyle, setNumberStyleState] = useState<NumberStyle>("western");
+  const fmtNum = (n: string | number | null | undefined) => formatNumberStr(n, numberStyle);
+
+  // Persist number style and mirror it back into localStorage so the homepage and other pages stay in sync.
+  const setNumberStyle = (v: NumberStyle) => {
+    setNumberStyleState(v);
+    try { localStorage.setItem(NUMBER_STYLE_LS, JSON.stringify(v)); } catch {}
+  };
+
   const printRef = useRef<HTMLDivElement>(null);
 
   // Derive available months from generated data
@@ -70,6 +83,14 @@ export default function PrintCalendarPage() {
   })();
 
   useEffect(() => {
+    // Restore number-style preference (shared with the homepage's settings modal).
+    try {
+      const ns = localStorage.getItem(NUMBER_STYLE_LS);
+      if (ns) {
+        const parsed = JSON.parse(ns) as NumberStyle;
+        if (parsed === "western" || parsed === "devanagari") setNumberStyleState(parsed);
+      }
+    } catch {}
     const saved = localStorage.getItem("pramanik_panchang_data");
     if (saved) {
       try {
@@ -154,14 +175,32 @@ export default function PrintCalendarPage() {
     <div className="mx-auto max-w-7xl px-4 py-4">
       {/* ── Screen Controls (hidden in print) ── */}
       <div className="no-print space-y-5 mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-orange-500">Print Calendar</h1>
             <p className="mt-1 text-sm text-gray-400">Configure and print monthly calendars</p>
           </div>
-          <button onClick={() => window.print()} className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">
-            Print / Save PDF
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg border border-gray-700 bg-gray-900 p-1 text-xs">
+              <button
+                onClick={() => setNumberStyle("western")}
+                className={`rounded px-2.5 py-1 ${numberStyle === "western" ? "bg-orange-600 text-white" : "text-gray-300 hover:text-orange-400"}`}
+                title="Western digits 1, 2, 3"
+              >
+                123
+              </button>
+              <button
+                onClick={() => setNumberStyle("devanagari")}
+                className={`rounded px-2.5 py-1 ${numberStyle === "devanagari" ? "bg-orange-600 text-white" : "text-gray-300 hover:text-orange-400"}`}
+                title="Devanagari digits १, २, ३"
+              >
+                १२३
+              </button>
+            </div>
+            <button onClick={() => window.print()} className="rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">
+              Print / Save PDF
+            </button>
+          </div>
         </div>
 
         {/* Calendar Type */}
@@ -273,7 +312,7 @@ export default function PrintCalendarPage() {
           <div className="cal-header">
             <div className="cal-title">
               <span className="cal-title-hi">प्रमाणिक पंचांग</span>
-              <span className="cal-title-year">वीर नि.सं. {monthDays[0]?.vnsYear || ""} — {selectedEntry?.year || ""}</span>
+              <span className="cal-title-year">वीर नि.सं. {fmtNum(monthDays[0]?.vnsYear) || ""} — {fmtNum(selectedEntry?.year) || ""}</span>
             </div>
             <div className="cal-month">
               {selectedEntry ? `${selectedEntry.labelHi} / ${selectedEntry.label}` : ""}
@@ -302,14 +341,14 @@ export default function PrintCalendarPage() {
                     >
                       {day && (
                         <>
-                          <div className="cal-date">{parseInt(day.date.split("-")[2])}</div>
+                          <div className="cal-date">{fmtNum(parseInt(day.date.split("-")[2]))}</div>
                           <div className="cal-tithi">
                             {day.tithi.nameHi}
                             {day.kshayaTithi && <span className="cal-kshaya"> +{day.kshayaTithi.nameHi}</span>}
                             {day.isVriddhiRepeat && <span className="cal-vriddhi"> (वृ)</span>}
                           </div>
                           <div className="cal-paksha">
-                            {day.tithi.pakshaHi === "शुक्ल पक्ष" ? "शु" : "कृ"} {day.tithi.number} · {day.hinduMonth.hi}
+                            {day.tithi.pakshaHi === "शुक्ल पक्ष" ? "शु" : "कृ"} {fmtNum(day.tithi.number)} · {day.hinduMonth.hi}
                           </div>
                           {day.todayEvents.length > 0 && (
                             <div className="cal-events">
@@ -336,7 +375,7 @@ export default function PrintCalendarPage() {
 
           {/* Footer */}
           <div className="cal-footer">
-            प्रमाणिक समूह · munipramansagar.net · gunayatan.com · Pramanik Panchang {selectedEntry?.year || ""}
+            प्रमाणिक समूह · munipramansagar.net · gunayatan.com · Pramanik Panchang {fmtNum(selectedEntry?.year) || ""}
           </div>
           </div>{/* end cal-table-wrapper */}
         </div>
