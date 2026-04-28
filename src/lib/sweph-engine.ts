@@ -122,6 +122,15 @@ function nakshatraAt(date: Date): number {
   return Math.floor(moonSid / (360 / 27)) + 1;
 }
 
+/** Pada within the current nakshatra (1..4). Each nakshatra spans 13°20' = 800', divided into
+ * four padas of 200' each (=3°20'). */
+function nakshatraPadaAt(date: Date): number {
+  const moonSid = sidLong(C.SE_MOON, date);
+  const nakSpan = 360 / 27; // 13.333...
+  const within = moonSid % nakSpan;
+  return Math.min(4, Math.floor(within / (nakSpan / 4)) + 1);
+}
+
 /** Yoga at instant (1..27). */
 function yogaAt(date: Date): number {
   const sunSid = sidLong(C.SE_SUN, date);
@@ -542,6 +551,33 @@ const DISHA_SHOOL: Record<number, { en: string; hi: string }> = {
   6: { en: "East", hi: "पूर्व" },
 };
 
+// ── Tithi pravritti (5-cycle naming): Nanda 1/6/11, Bhadra 2/7/12, Jaya 3/8/13, Rikta 4/9/14, Purna 5/10/15
+const TITHI_PRAVRITTI: Record<number, { nameHi: string; nameEn: string }> = {
+  1: { nameHi: "नन्दा", nameEn: "Nanda" },
+  2: { nameHi: "भद्रा", nameEn: "Bhadra" },
+  3: { nameHi: "जया", nameEn: "Jaya" },
+  4: { nameHi: "रिक्ता", nameEn: "Rikta" },
+  0: { nameHi: "पूर्णा", nameEn: "Purna" }, // tithi % 5 == 0 (i.e. 5, 10, 15)
+};
+
+function tithiPravrittiOf(tithiInPaksha: number): { nameHi: string; nameEn: string } {
+  return TITHI_PRAVRITTI[tithiInPaksha % 5];
+}
+
+// ── Hora lord: planetary hour ruler at sunrise.
+// The vara's lord is the lord of the FIRST hora (sunrise + 0). Order of horas through the day
+// follows the Chaldean sequence: Sat → Jup → Mars → Sun → Venus → Mercury → Moon → Sat...
+// (We only surface the sunrise hora here.)
+const VARA_LORD: Record<number, { en: string; hi: string }> = {
+  0: { en: "Sun", hi: "सूर्य" },        // Sunday
+  1: { en: "Moon", hi: "चन्द्र" },     // Monday
+  2: { en: "Mars", hi: "मंगल" },       // Tuesday
+  3: { en: "Mercury", hi: "बुध" },     // Wednesday
+  4: { en: "Jupiter", hi: "गुरु" },    // Thursday
+  5: { en: "Venus", hi: "शुक्र" },     // Friday
+  6: { en: "Saturn", hi: "शनि" },      // Saturday
+};
+
 // Anandadi Yoga: 28 yogas in a cycle, indexed by (nakshatra + vara) mod 28.
 const ANANDADI_NAMES = [
   "Anand", "Kaaldand", "Dhumra", "Prajapati", "Saumya", "Dhwajra", "Shrivatsa",
@@ -781,6 +817,9 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     dayDuration,
     samvats,
     rasTyag: RAS_TYAG_BY_VARA[vara],
+    nakshatraPada: nakshatraPadaAt(sunrise),
+    tithiPravritti: tithiPravrittiOf(tithiInPaksha),
+    horaLordSunrise: { planetEn: VARA_LORD[vara].en, planetHi: VARA_LORD[vara].hi },
   };
   return day;
 }

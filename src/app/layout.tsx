@@ -17,7 +17,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body className="min-h-screen bg-gray-950 text-gray-100 antialiased">
         <HamburgerNav />
         {/* Pages decide their own padding. Homepage uses fit-to-window; other pages use a

@@ -107,6 +107,14 @@ export interface PanchangDay {
 
   // Ras Tyag — the food/taste traditionally given up on this weekday (Jain practice)
   rasTyag?: { rasHi: string; rasEn: string; itemsHi: string; itemsEn: string; emoji: string };
+
+  // ── Jyotisha extras (for the multi-page widget's astronomical detail page) ──
+  /** Pada (1-4) of the moon's current nakshatra */
+  nakshatraPada?: number;
+  /** Tithi pravritti — nanda/bhadra/jaya/rikta/purna */
+  tithiPravritti?: { nameHi: string; nameEn: string };
+  /** Planetary lord of the first hora at sunrise (Sun/Moon/Mars/etc.) */
+  horaLordSunrise?: { planetEn: string; planetHi: string };
 }
 
 // ── Phase B (reserved — shipped in subsequent release) ──
