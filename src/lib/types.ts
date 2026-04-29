@@ -2,6 +2,7 @@ export interface PanchangDay {
   date: string; // YYYY-MM-DD
   vnsYear: number;
   vnsDateHi: string; // e.g., "चैत्र शुक्ल 13"
+  vnsDateEn?: string; // e.g., "Chaitra Shukla 13" — English equivalent for lang=en mode
   varaHi: string;
   varaEn: string;
   tithi: {
@@ -141,7 +142,9 @@ export interface PanchangDay {
   tomorrow?: {
     date: string;
     varaHi: string;
-    tithiHeadlineHi: string; // e.g. "वैशाख शुक्ल त्रयोदशी"
+    varaEn: string;            // e.g. "Wednesday"
+    tithiHeadlineHi: string;   // e.g. "वैशाख शुक्ल त्रयोदशी"
+    tithiHeadlineEn: string;   // e.g. "Vaishakha Shukla Trayodashi"
   };
 
   // ── 30 Nitya Muhurtas (15 day + 15 night, each ~48 minutes) ──
@@ -154,7 +157,9 @@ export interface PanchangDay {
     nameEn: string;
     classification: "shubh" | "ashubh" | "ati-shubh";
     doHi: string;
+    doEn: string;
     dontHi: string;
+    dontEn: string;
     startTime: string; // "HH:MM"
     endTime: string;
     /** Whether this muhurta belongs to day (sunrise→sunset) or night (sunset→next sunrise). */

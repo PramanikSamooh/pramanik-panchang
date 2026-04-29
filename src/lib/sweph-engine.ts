@@ -584,7 +584,9 @@ function computeNityaMuhurtas(
       nameEn: spec.nameEn,
       classification: resolveNityaClass(spec, vara),
       doHi: spec.doHi,
+      doEn: spec.doEn,
       dontHi: spec.dontHi,
+      dontEn: spec.dontEn,
       startTime: formatTime(start, tz),
       endTime: formatTime(end, tz),
       period: "day",
@@ -604,7 +606,9 @@ function computeNityaMuhurtas(
         nameEn: spec.nameEn,
         classification: resolveNityaClass(spec, vara),
         doHi: spec.doHi,
+        doEn: spec.doEn,
         dontHi: spec.dontHi,
+        dontEn: spec.dontEn,
         startTime: formatTime(start, tz),
         endTime: formatTime(end, tz),
         period: "night",
@@ -835,7 +839,11 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   const dateStr = formatDateStr(date, loc.tz);
   const pakshaLabelHi = ut.paksha === "Shukla" ? "शुक्ल" : "कृष्ण";
   const adhikaSuffixHi = adhika ? " (अधिक)" : "";
-  const vnsDateHi = `${hinduMonthHi}${adhikaSuffixHi} ${pakshaLabelHi} ${tithiInPaksha}`;
+  const adhikaSuffixEn = adhika ? " (Adhika)" : "";
+  const tithiNameHi = tithi15 ? tithi15.hi : (TITHI_NAMES_HI[tithiIdx] || `तिथि ${tithiInPaksha}`);
+  const tithiNameEn = tithi15 ? tithi15.en : (TITHI_NAMES_EN[tithiIdx] || `Tithi ${tithiInPaksha}`);
+  const vnsDateHi = `${hinduMonthHi}${adhikaSuffixHi} ${pakshaLabelHi} ${tithiNameHi}`;
+  const vnsDateEn = `${hinduMonthEn}${adhikaSuffixEn} ${ut.paksha} ${tithiNameEn}`;
 
   // Special yogas
   const specialYogas: SpecialYogaPeriod[] = [];
@@ -948,6 +956,7 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     date: dateStr,
     vnsYear: samvats.virNirvan, // refined later
     vnsDateHi,
+    vnsDateEn,
     varaHi: VARA_HI[vara],
     varaEn: VARA_EN[vara],
     tithi: {
@@ -1029,15 +1038,21 @@ function computeTomorrowPreview(date: Date, loc: LocationConfig): NonNullable<Pa
   const tithiInPaksha = ut.paksha === "Shukla" ? ut.tithi : ut.tithi - 15;
   const tithiIdx = Math.min(Math.max(tithiInPaksha - 1, 0), 14);
   const tithi15 = tithiInPaksha === 15 ? getTithi15Name(ut.paksha) : null;
-  const tithiName = tithi15 ? tithi15.hi : (TITHI_NAMES_HI[tithiIdx] || `तिथि ${tithiInPaksha}`);
+  const tithiNameHi = tithi15 ? tithi15.hi : (TITHI_NAMES_HI[tithiIdx] || `तिथि ${tithiInPaksha}`);
+  const tithiNameEn = tithi15 ? tithi15.en : (TITHI_NAMES_EN[tithiIdx] || `Tithi ${tithiInPaksha}`);
   const masaPIdx = masaIndexPurnimanta(ref);
-  const masaName = HINDU_MONTHS.find((m) => m.en === MASA_NAMES_EN[masaPIdx])?.hi || MASA_NAMES_EN[masaPIdx];
+  const masaEn = MASA_NAMES_EN[masaPIdx];
+  const masaHi = HINDU_MONTHS.find((m) => m.en === masaEn)?.hi || masaEn;
   const pakshaHi = ut.paksha === "Shukla" ? "शुक्ल" : "कृष्ण";
+  const pakshaEn = ut.paksha;
   const local = new Date(tomorrow.getTime() + loc.tz * 60 * 1000);
+  const varaIdx = local.getUTCDay();
   return {
     date: formatDateStr(tomorrow, loc.tz),
-    varaHi: VARA_HI[local.getUTCDay()],
-    tithiHeadlineHi: `${masaName} ${pakshaHi} ${tithiName}`,
+    varaHi: VARA_HI[varaIdx],
+    varaEn: VARA_EN[varaIdx],
+    tithiHeadlineHi: `${masaHi} ${pakshaHi} ${tithiNameHi}`,
+    tithiHeadlineEn: `${masaEn} ${pakshaEn} ${tithiNameEn}`,
   };
 }
 
@@ -1236,10 +1251,14 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
     const day = allDays[i];
     const next = allDays[i + 1];
     if (next) {
+      const adhHi = next.masaIsAdhika ? " (अधिक)" : "";
+      const adhEn = next.masaIsAdhika ? " (Adhika)" : "";
       day.tomorrow = {
         date: next.date,
         varaHi: next.varaHi,
-        tithiHeadlineHi: `${next.hinduMonth.hi}${next.masaIsAdhika ? " (अधिक)" : ""} ${next.tithi.pakshaHi.replace(" पक्ष", "")} ${next.tithi.nameHi}`,
+        varaEn: next.varaEn,
+        tithiHeadlineHi: `${next.hinduMonth.hi}${adhHi} ${next.tithi.pakshaHi.replace(" पक्ष", "")} ${next.tithi.nameHi}`,
+        tithiHeadlineEn: `${next.hinduMonth.en}${adhEn} ${next.tithi.pakshaEn.replace(" Paksha", "")} ${next.tithi.nameEn}`,
       };
     } else {
       const [y, m, d] = day.date.split("-").map(Number);

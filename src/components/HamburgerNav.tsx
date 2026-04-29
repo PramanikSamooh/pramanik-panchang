@@ -1,11 +1,12 @@
 "use client";
 
 // HamburgerNav — slide-out hamburger menu used by the root layout.
-// Pure navigation. The widget at /d/[date] has its own date picker, share, settings;
+// Pure navigation. The full panchang at /d/[date] has its own settings bar;
 // other admin pages (Generate, Events, Print Calendar) are linked from here.
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { BRAND } from "@/lib/branding";
 
 const NAV_LINKS = [
   { href: "/", label: "Daily Panchang", emoji: "📿" },
@@ -38,7 +39,7 @@ export default function HamburgerNav() {
           </button>
           <a href="/" className="flex items-center gap-2 text-base font-bold text-orange-400">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-600 text-sm font-bold text-white">P</span>
-            <span className="hidden sm:inline">तीर्थंकर वर्धमान जैन पंचांग</span>
+            <span className="hidden sm:inline">{BRAND.shortHi}</span>
             <span className="sm:hidden">पंचांग</span>
           </a>
         </div>

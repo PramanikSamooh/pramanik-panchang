@@ -1,4 +1,4 @@
-// Homepage redirects to /d/<today>. The daily-panchang widget at /d/[date] is the canonical
+// Homepage redirects to /d/<today>. The full daily panchang at /d/[date] is the canonical
 // landing page for end users; the homepage exists only so panchang.gunayatan.org/ also works.
 
 import { redirect } from "next/navigation";

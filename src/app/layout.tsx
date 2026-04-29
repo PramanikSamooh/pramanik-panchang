@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import HamburgerNav from "@/components/HamburgerNav";
+import { BRAND } from "@/lib/branding";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "तीर्थंकर वर्धमान जैन पंचांग — Pramanik Jain Panchang",
+  title: `${BRAND.shortHi} — ${BRAND.longEn}`,
   description:
     "Authentic Digambara Jain Daily Panchang — tithi, nakshatra, yoga, karana, sunrise/sunset, muhurtas, choghadiya, kalyanaks, parvas, vrats. Computed using Swiss Ephemeris.",
 };

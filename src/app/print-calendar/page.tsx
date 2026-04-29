@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { PanchangDay } from "@/lib/types";
 import { type NumberStyle, formatNumberStr } from "@/lib/display-format";
+import { BRAND } from "@/lib/branding";
 
 const NUMBER_STYLE_LS = "pramanik.numberStyle";
 
@@ -375,7 +376,7 @@ export default function PrintCalendarPage() {
 
           {/* Footer */}
           <div className="cal-footer">
-            प्रमाणिक समूह · munipramansagar.net · gunayatan.com · Pramanik Panchang {fmtNum(selectedEntry?.year) || ""}
+            प्रमाणिक समूह · munipramansagar.net · gunayatan.com · {BRAND.shortEn} {fmtNum(selectedEntry?.year) || ""}
           </div>
           </div>{/* end cal-table-wrapper */}
         </div>
