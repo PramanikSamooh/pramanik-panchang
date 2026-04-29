@@ -30,6 +30,11 @@ export interface JainEvent {
   nakshatraRule?: { nakshatraNumber: number };
   // Adhika-maas policy — Digambara default is "nija-only"
   adhikaMaasPolicy?: "nija-only" | "both" | "adhika-only" | "skip";
+  // Calendar convention for the month name. Default is "either" (matches both Amanta and
+  // Purnimanta naming, used for kalyanaks/parvas that the Excel sources mix). Set to "amanta"
+  // for events traditionally observed by Amanta convention — Jain vrats like Ratnatraya,
+  // Pushpanjali, Labdhi Vidhan, Shodash Karan, Ashtahnika, Dash Lakshan all follow Amanta.
+  monthConvention?: "amanta" | "purnimanta" | "either";
   // Whether this event should be included in export by default (false = opt-in, e.g. acharya)
   includeByDefault?: boolean;
   // For category "acharya"
@@ -394,6 +399,7 @@ function generateVrats(): JainEvent[] {
       nameHi: `अष्टाह्निका व्रत (${hi})`, nameEn: `Ashtahnika Vrat (${m})`,
       hinduMonth: m, hinduPaksha: "Shukla", hinduTithi: 0,
       tithiRange: { startTithi: 8, endTithi: 15 },
+      monthConvention: "amanta",
       colorTheme: VRAT_COLOR, isActive: true,
     });
   }
@@ -411,6 +417,7 @@ function generateVrats(): JainEvent[] {
       nameHi: `रत्नत्रय व्रत (${hi})`, nameEn: `Ratnatraya Vrat (${m})`,
       hinduMonth: m, hinduPaksha: "Shukla", hinduTithi: 0,
       tithiRange: { startTithi: 13, endTithi: 15 },
+      monthConvention: "amanta",
       colorTheme: VRAT_COLOR, isActive: true,
     });
   }
@@ -424,6 +431,7 @@ function generateVrats(): JainEvent[] {
       nameHi: `पुष्पांजलि व्रत (${hi})`, nameEn: `Pushpanjali Vrat (${m})`,
       hinduMonth: m, hinduPaksha: "Shukla", hinduTithi: 0,
       tithiRange: { startTithi: 5, endTithi: 9 },
+      monthConvention: "amanta",
       colorTheme: VRAT_COLOR, isActive: true,
     });
   }
@@ -436,6 +444,7 @@ function generateVrats(): JainEvent[] {
       nameHi: `लब्धि विधान व्रत (${hi})`, nameEn: `Labdhi Vidhan Vrat (${m})`,
       hinduMonth: m, hinduPaksha: "Shukla", hinduTithi: 0,
       tithiRange: { startTithi: 1, endTithi: 3 },
+      monthConvention: "amanta",
       colorTheme: VRAT_COLOR, isActive: true,
     });
   }
@@ -457,6 +466,7 @@ function generateVrats(): JainEvent[] {
       category: "vrat", tirthankaraNumber: null, kalyanakType: null,
       nameHi: `षोडश कारण व्रत प्रारम्भ (${s.startHi})`, nameEn: `Shodash Karan Vrat Start (${s.startMonth})`,
       hinduMonth: s.startMonth, hinduPaksha: "Shukla", hinduTithi: 14,
+      monthConvention: "amanta",
       colorTheme: VRAT_COLOR, isActive: true,
     });
     events.push({
@@ -464,6 +474,7 @@ function generateVrats(): JainEvent[] {
       category: "vrat", tirthankaraNumber: null, kalyanakType: null,
       nameHi: `षोडश कारण व्रत पूर्ण (${s.endHi})`, nameEn: `Shodash Karan Vrat End (${s.endMonth})`,
       hinduMonth: s.endMonth, hinduPaksha: "Krishna", hinduTithi: 1,
+      monthConvention: "amanta",
       colorTheme: VRAT_COLOR, isActive: true,
     });
   }
@@ -480,6 +491,7 @@ function generateDasLakshan(): JainEvent[] {
       category: "jain_parv", tirthankaraNumber: null, kalyanakType: null,
       nameHi: "दस लक्षण पर्व प्रारम्भ", nameEn: "Das Lakshan Parva Start",
       hinduMonth: m.month, hinduPaksha: "Shukla", hinduTithi: 5,
+      monthConvention: "amanta",
       colorTheme: m.color, isActive: true,
     });
     // 10 individual Dharm days
@@ -489,6 +501,7 @@ function generateDasLakshan(): JainEvent[] {
         category: "jain_parv", tirthankaraNumber: null, kalyanakType: null,
         nameHi: d.hi, nameEn: d.en,
         hinduMonth: m.month, hinduPaksha: "Shukla", hinduTithi: d.tithi,
+        monthConvention: "amanta",
         colorTheme: m.color, isActive: true,
       });
     }

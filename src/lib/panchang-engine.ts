@@ -155,10 +155,11 @@ async function generatePanchangForRange(
     const nakshatraIdx = Math.min(Math.max(pResult.nakshatra ?? 0, 0), 26);
     const nakshatraNumber = nakshatraIdx + 1; // 1..27
 
-    // Match events (tithi rules + Gregorian overrides + nakshatra + adhika-maas policy)
+    // Match events (tithi rules + Gregorian overrides + nakshatra + adhika-maas policy).
+    // The legacy engine reports the Purnimanta name only — pass that as the convention.
     const todayEvents = matchEventsForDate(
       dateStr, date.getFullYear(), hinduMonthEn, paksha, tithiInPaksha,
-      nakshatraNumber, masaIsAdhika, activeEvents
+      nakshatraNumber, masaIsAdhika, activeEvents, "purnimanta",
     );
 
     // VNS date string (append adhika/nija label if applicable)
@@ -346,7 +347,7 @@ async function generatePanchangForRange(
         const prevMasaIsAdhika = prev.masaIsAdhika ?? false;
         const skippedEvents = matchEventsForDate(
           prev.date, new Date(prev.date).getFullYear(), prev.hinduMonth.en, paksha,
-          skippedNum, prevNakshatra, prevMasaIsAdhika, activeEvents
+          skippedNum, prevNakshatra, prevMasaIsAdhika, activeEvents, "purnimanta",
         );
         if (skippedEvents.length > 0) {
           const existingIds = new Set(allDays[i - 1].todayEvents.map((e) => e.eventId));
@@ -396,18 +397,17 @@ async function generatePanchangForRange(
   }
 
   // ── First-occurrence-wins (adhika maas handling) ──
-  // For tithi-based events: when a Hindu month repeats in the year (adhika maas), the event
-  // should fire only on the FIRST occurrence per civil year. Without this pass an event like
-  // Shantinath janma would fire twice in 2026 (both Jyeshthas).
+  // For single-tithi events: when a Hindu month repeats in an adhika-maas year, the event
+  // should fire only on the FIRST occurrence per civil year (e.g., Shantinath Jyeshtha kalyanaks
+  // would otherwise fire twice in 2026 — once in nija Jyeshtha, once in adhika).
   //
-  // Multi-day vrats (with tithiRange) should fire on EVERY day in their tithi window during the
-  // first matching month — but not repeat in a second month. This is implemented by tracking the
-  // last-fired day index per eventId; consecutive-day firings are kept (multi-day vrat continuing),
-  // gap firings are dropped (re-occurrence in adhika month).
-  //
-  // Excluded from de-duplication entirely (always fire):
+  // EXEMPT (always fire, no de-dup):
   //   - fixed-Gregorian events (national holidays)
-  //   - nakshatra-rule events (Rohini Vrat — designed to recur monthly when moon enters Rohini)
+  //   - nakshatra-rule events (Rohini Vrat — recurs monthly when moon enters Rohini)
+  //   - tithiRange (multi-day vrats): legitimate to fire in multiple months (Ratnatraya:
+  //     Magha + Chaitra + Bhadrapada) and dual-calendar matching produces gap-firings within
+  //     the same lunar month that should not be suppressed. Their `adhikaMaasPolicy` already
+  //     controls adhika behavior.
   {
     const eventLookup = new Map(activeEvents.map((e) => [e.id, e]));
     const lastFiredIdx = new Map<string, number>();
@@ -416,14 +416,13 @@ async function generatePanchangForRange(
       const filtered: typeof day.todayEvents = [];
       for (const evt of day.todayEvents) {
         const def = eventLookup.get(evt.eventId);
-        const alwaysFire = !!(def?.fixedDate || def?.nakshatraRule);
+        const alwaysFire = !!(def?.fixedDate || def?.nakshatraRule || def?.tithiRange);
         if (alwaysFire) {
           filtered.push(evt);
           continue;
         }
         const last = lastFiredIdx.get(evt.eventId);
         if (last === undefined || last === i - 1) {
-          // First firing or consecutive-day continuation of a multi-day vrat
           filtered.push(evt);
           lastFiredIdx.set(evt.eventId, i);
         }
@@ -476,12 +475,22 @@ function matchEventsForDate(
   tithiNumber: number,
   nakshatraNumber: number,
   masaIsAdhika: boolean,
-  events: JainEvent[]
+  events: JainEvent[],
+  /** Convention of the `hinduMonth` we were called with. Events whose `monthConvention`
+   *  doesn't match (and isn't "either") are skipped on this pass. */
+  callerConvention: "amanta" | "purnimanta",
 ): EventSummary[] {
   const matched: EventSummary[] = [];
   const yearStr = String(year);
 
   for (const event of events) {
+    // Convention filter (calendar-based events only).
+    const isCalendarBased = !event.fixedDate && !event.gregorianOverrides && !event.nakshatraRule;
+    if (isCalendarBased) {
+      const want = event.monthConvention ?? "either";
+      if (want !== "either" && want !== callerConvention) continue;
+    }
+
     let isMatch = false;
 
     // Check fixed Gregorian date (e.g., "01-26" for Republic Day)

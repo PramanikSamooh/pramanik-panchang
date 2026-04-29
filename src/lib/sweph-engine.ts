@@ -1084,23 +1084,28 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
     onProgress?.(i + 1, totalDays);
   }
 
-  // Match events. The seeded events DB has month names that come from a mix of Amanta and
-  // Purnimanta sources (e.g., Diwali = Kartik Krishna 15 is Amanta naming; Shantinath = Jyeshtha
-  // Krishna 14 is Purnimanta naming). We match on BOTH conventions; if an event matches either,
-  // it fires. Shukla-paksha events agree in both conventions, so this is safe.
+  // Match events. The seeded events DB mixes calendar conventions: kalyanaks/parvas come from
+  // sources that variously use Amanta or Purnimanta naming (e.g., Diwali = Kartik Krishna 15 is
+  // Amanta; Shantinath = Jyeshtha Krishna 14 is Purnimanta). Each match call is told which
+  // convention is the "current month" name, and individual events declare their preferred
+  // convention via `monthConvention` (default = "either" — match against either Amanta or
+  // Purnimanta). Jain multi-day vrats explicitly set "amanta" so they don't double-fire.
   for (const day of allDays) {
     const paksha = day.tithi.pakshaEn.includes("Shukla") ? "Shukla" : "Krishna";
     const naksNum = day.nakshatra?.number ?? 0;
     const purnamantaMonth = day.hinduMonth.en;
     const amantaMonth = day.hinduMonthAmanta?.en ?? day.hinduMonth.en;
+    // Always run BOTH passes — even when the two conventions agree on the month name. The
+    // event's `monthConvention` decides which pass(es) it can match in. Skipping a pass when
+    // names happen to agree would silently drop Amanta-only or Purnimanta-only events.
     const matchedP = matchEventsForDate(
       day.date, new Date(day.date).getFullYear(), purnamantaMonth, paksha,
-      day.tithi.number, naksNum, !!day.masaIsAdhika, activeEvents,
+      day.tithi.number, naksNum, !!day.masaIsAdhika, activeEvents, "purnimanta",
     );
-    const matchedA = amantaMonth !== purnamantaMonth ? matchEventsForDate(
+    const matchedA = matchEventsForDate(
       day.date, new Date(day.date).getFullYear(), amantaMonth, paksha,
-      day.tithi.number, naksNum, !!day.masaIsAdhika, activeEvents,
-    ) : [];
+      day.tithi.number, naksNum, !!day.masaIsAdhika, activeEvents, "amanta",
+    );
     // Merge, dedupe by eventId
     const seen = new Set<string>();
     const merged: typeof matchedP = [];
@@ -1145,14 +1150,15 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
         const paksha = prev.tithi.pakshaEn.includes("Shukla") ? "Shukla" : "Krishna";
         const purnaM = prev.hinduMonth.en;
         const amantaM = prev.hinduMonthAmanta?.en ?? purnaM;
+        // Always run both passes (see the matching loop above for why).
         const skippedP = matchEventsForDate(
           prev.date, new Date(prev.date).getFullYear(), purnaM, paksha,
-          skippedNum, prev.nakshatra?.number ?? 0, !!prev.masaIsAdhika, activeEvents,
+          skippedNum, prev.nakshatra?.number ?? 0, !!prev.masaIsAdhika, activeEvents, "purnimanta",
         );
-        const skippedA = amantaM !== purnaM ? matchEventsForDate(
+        const skippedA = matchEventsForDate(
           prev.date, new Date(prev.date).getFullYear(), amantaM, paksha,
-          skippedNum, prev.nakshatra?.number ?? 0, !!prev.masaIsAdhika, activeEvents,
-        ) : [];
+          skippedNum, prev.nakshatra?.number ?? 0, !!prev.masaIsAdhika, activeEvents, "amanta",
+        );
         const seen = new Set(prev.todayEvents.map((e) => e.eventId));
         for (const e of [...skippedP, ...skippedA]) {
           if (!seen.has(e.eventId)) { seen.add(e.eventId); prev.todayEvents.push(e); }
@@ -1171,7 +1177,19 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
     }
   }
 
-  // First-occurrence-wins
+  // First-occurrence-wins (adhika-maas de-dup)
+  //
+  // Single-tithi events (like a kalyanak on Jyeshtha Krishna 14) can match twice in an adhika-maas
+  // year — once in nija Jyeshtha and once in adhika Jyeshtha. We keep only the first match per
+  // civil year. Adhika-aware matching (via `adhikaMaasPolicy`) already handles the policy;
+  // this rule is a safety net for events without an explicit policy.
+  //
+  // EXEMPT (always fire, no de-dup):
+  //  - fixedDate / nakshatraRule events (no calendar ambiguity)
+  //  - tithiRange (multi-day vrats): these intrinsically fire multiple days, can legitimately
+  //    fire in multiple months of the year (Ratnatraya: Magha + Chaitra + Bhadrapada), and the
+  //    dual-calendar matching (Amanta + Purnimanta) produces gap-firings that shouldn't be
+  //    suppressed. Their `adhikaMaasPolicy` already controls adhika behavior.
   {
     const eventLookup = new Map(activeEvents.map((e) => [e.id, e]));
     const lastFiredIdx = new Map<string, number>();
@@ -1180,7 +1198,7 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
       const filtered: typeof day.todayEvents = [];
       for (const evt of day.todayEvents) {
         const def = eventLookup.get(evt.eventId);
-        const alwaysFire = !!(def?.fixedDate || def?.nakshatraRule);
+        const alwaysFire = !!(def?.fixedDate || def?.nakshatraRule || def?.tithiRange);
         if (alwaysFire) { filtered.push(evt); continue; }
         const last = lastFiredIdx.get(evt.eventId);
         if (last === undefined || last === i - 1) {
@@ -1299,10 +1317,20 @@ function matchEventsForDate(
   nakshatraNumber: number,
   masaIsAdhika: boolean,
   events: JainEvent[],
+  /** Convention of the `hinduMonth` we were called with. Events whose `monthConvention`
+   *  doesn't match this (and isn't "either") are skipped on this pass. */
+  callerConvention: "amanta" | "purnimanta",
 ): EventSummary[] {
   const matched: EventSummary[] = [];
   const yearStr = String(year);
   for (const event of events) {
+    // Convention filter — only applies to month/tithi-based events (fixedDate, nakshatraRule,
+    // and gregorianOverrides events bypass calendar conventions entirely).
+    const isCalendarBased = !event.fixedDate && !event.gregorianOverrides && !event.nakshatraRule;
+    if (isCalendarBased) {
+      const want = event.monthConvention ?? "either";
+      if (want !== "either" && want !== callerConvention) continue;
+    }
     let isMatch = false;
     if (event.fixedDate && dateStr.endsWith(event.fixedDate)) isMatch = true;
     else if (event.gregorianOverrides && event.gregorianOverrides[yearStr] === dateStr) isMatch = true;
