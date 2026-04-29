@@ -143,6 +143,23 @@ export interface PanchangDay {
     varaHi: string;
     tithiHeadlineHi: string; // e.g. "वैशाख शुक्ल त्रयोदशी"
   };
+
+  // ── 30 Nitya Muhurtas (15 day + 15 night, each ~48 minutes) ──
+  // Day muhurtas (1..15) divide sunrise → sunset; night muhurtas (16..30) divide
+  // sunset → next sunrise. Classification is "shubh" / "ashubh" / "ati-shubh", with a few
+  // muhurtas conditional on the weekday (e.g., अर्धमन is शुभ except Sunday).
+  nityaMuhurtas?: Array<{
+    number: number;
+    nameHi: string;
+    nameEn: string;
+    classification: "shubh" | "ashubh" | "ati-shubh";
+    doHi: string;
+    dontHi: string;
+    startTime: string; // "HH:MM"
+    endTime: string;
+    /** Whether this muhurta belongs to day (sunrise→sunset) or night (sunset→next sunrise). */
+    period: "day" | "night";
+  }>;
 }
 
 // ── Phase B (reserved — shipped in subsequent release) ──

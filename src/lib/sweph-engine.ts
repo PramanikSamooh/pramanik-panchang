@@ -12,6 +12,7 @@ import {
   type JainEvent,
 } from "@/data/jain-events";
 import { RAS_TYAG_BY_VARA } from "./ras-tyag";
+import { NITYA_MUHURTAS, resolveNityaClass } from "./nitya-muhurtas";
 import type { PanchangDay, EventSummary, UpcomingEvent, SpecialYogaPeriod } from "./types";
 
 const C = sweph.constants;
@@ -562,6 +563,57 @@ function computeExtraMuhurtas(
   };
 }
 
+/** 30 Nitya Muhurtas — 15 day muhurtas (sunrise → sunset, equal 1/15ths) +
+ * 15 night muhurtas (sunset → next sunrise, equal 1/15ths). Each is ~48 minutes
+ * in length and carries a fixed name + classification + recommended/avoided activities.
+ * Vara-conditional muhurtas (e.g. अर्धमन / विदि) flip classification on specific weekdays. */
+function computeNityaMuhurtas(
+  sunrise: Date, sunset: Date, nextSunrise: Date | null, vara: number, tz: number,
+): NonNullable<PanchangDay["nityaMuhurtas"]> {
+  const out: NonNullable<PanchangDay["nityaMuhurtas"]> = [];
+  const dayMs = sunset.getTime() - sunrise.getTime();
+  const dayStep = dayMs / 15;
+  // Day muhurtas 1..15
+  for (let i = 0; i < 15; i++) {
+    const spec = NITYA_MUHURTAS[i];
+    const start = new Date(sunrise.getTime() + i * dayStep);
+    const end = new Date(sunrise.getTime() + (i + 1) * dayStep);
+    out.push({
+      number: spec.number,
+      nameHi: spec.nameHi,
+      nameEn: spec.nameEn,
+      classification: resolveNityaClass(spec, vara),
+      doHi: spec.doHi,
+      dontHi: spec.dontHi,
+      startTime: formatTime(start, tz),
+      endTime: formatTime(end, tz),
+      period: "day",
+    });
+  }
+  // Night muhurtas 16..30 — only if we know the next sunrise
+  if (nextSunrise) {
+    const nightMs = nextSunrise.getTime() - sunset.getTime();
+    const nightStep = nightMs / 15;
+    for (let i = 0; i < 15; i++) {
+      const spec = NITYA_MUHURTAS[15 + i];
+      const start = new Date(sunset.getTime() + i * nightStep);
+      const end = new Date(sunset.getTime() + (i + 1) * nightStep);
+      out.push({
+        number: spec.number,
+        nameHi: spec.nameHi,
+        nameEn: spec.nameEn,
+        classification: resolveNityaClass(spec, vara),
+        doHi: spec.doHi,
+        dontHi: spec.dontHi,
+        startTime: formatTime(start, tz),
+        endTime: formatTime(end, tz),
+        period: "night",
+      });
+    }
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Choghadiya — 8 day segments + 8 night segments
 // ─────────────────────────────────────────────────────────────────────────────
@@ -837,6 +889,9 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   // Extra muhurtas (Vijaya, Godhuli, Sandhya, Nishita)
   const extraMuhurtas = computeExtraMuhurtas(sunrise, sunset, nextSunrise, loc.tz);
 
+  // 30 Nitya Muhurtas (15 day + 15 night)
+  const nityaMuhurtas = computeNityaMuhurtas(sunrise, sunset, nextSunrise, vara, loc.tz);
+
   // Karana / yoga sequences for the civil day (sunrise → next sunrise)
   const dayEnd = nextSunrise ?? new Date(sunrise.getTime() + DAY_MS);
   const karanaSequence = karanasInWindow(sunrise, dayEnd).map((k) => ({
@@ -958,6 +1013,7 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     lagnaAtSunrise: lagna,
     varaShoola: { direction: varaShoola.en, directionHi: varaShoola.hi },
     extraMuhurtas,
+    nityaMuhurtas,
   };
   return day;
 }

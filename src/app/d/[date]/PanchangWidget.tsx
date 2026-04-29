@@ -90,6 +90,7 @@ const PAGE_TITLES = [
   { hi: "चौघड़िया", en: "Choghadiya" },
   { hi: "खगोलीय विवरण", en: "Astronomical Detail" },
   { hi: "संवत् एवं काल", en: "Samvats & Calendar" },
+  { hi: "30 नित्य-मुहूर्त", en: "30 Nitya Muhurtas" },
 ];
 const TOTAL_PAGES = PAGE_TITLES.length;
 
@@ -316,6 +317,7 @@ export default function PanchangWidget({
         {pageIdx === 2 && <Page3Choghadiya day={day} fmtTime={fmtTime} />}
         {pageIdx === 3 && <Page4Astronomical day={day} fmtTime={fmtTime} fmtNum={fmtNum} fmtBi={fmtBi} />}
         {pageIdx === 4 && <Page5Calendar day={day} fmtNum={fmtNum} />}
+        {pageIdx === 5 && <Page6NityaMuhurtas day={day} fmtTime={fmtTime} fmtNum={fmtNum} />}
       </main>
 
       {/* ── BOTTOM NAV (page indicator + arrows) ── */}
@@ -797,6 +799,152 @@ function Page5Calendar({
       </div>
     </div>
   );
+}
+
+// ─── PAGE 6 — 30 NITYA MUHURTAS ──────────────────────────────────────────────
+
+function Page6NityaMuhurtas({
+  day, fmtTime, fmtNum,
+}: {
+  day: PanchangDay;
+  fmtTime: (t: string | undefined | null) => string;
+  fmtNum: (n: string | number | null | undefined) => string;
+}) {
+  const ms = day.nityaMuhurtas ?? [];
+  if (ms.length === 0) {
+    return (
+      <div>
+        <PageHeader titleHi="30 नित्य-मुहूर्त" subtitle="दिन के 30 भाग, प्रत्येक ≈ 48 मिनट" />
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-6 text-center text-[14px] text-stone-600">
+          अभी डेटा उपलब्ध नहीं
+        </div>
+      </div>
+    );
+  }
+
+  // Determine the currently-active muhurta if the user is viewing the panchang on the same
+  // calendar day. Compare current local HH:MM (in IST) to each muhurta's window.
+  const nowMin = currentLocalMinutesIST();
+  const isToday = day.date === todayLocalISO();
+  const findActive = (): number | null => {
+    if (!isToday) return null;
+    for (const m of ms) {
+      const startMin = hhmmToMin(m.startTime);
+      const endMin = hhmmToMin(m.endTime);
+      // Night muhurtas can wrap past midnight (e.g. 23:17 → 00:01)
+      if (endMin < startMin) {
+        if (nowMin >= startMin || nowMin < endMin) return m.number;
+      } else if (nowMin >= startMin && nowMin < endMin) {
+        return m.number;
+      }
+    }
+    return null;
+  };
+  const activeNum = findActive();
+
+  const day15 = ms.filter((m) => m.period === "day");
+  const night15 = ms.filter((m) => m.period === "night");
+
+  return (
+    <div>
+      <PageHeader titleHi="30 नित्य-मुहूर्त" subtitle="करने योग्य / न करने योग्य" />
+
+      <div className="mb-2 rounded-lg bg-amber-100 px-3 py-2 text-center text-[12px] text-stone-700">
+        दिन = 30 मुहूर्त (समान भाग, ≈ 48 मिनट प्रति मुहूर्त)
+        {activeNum && (
+          <div className="mt-1 text-[13px] font-bold text-orange-800">
+            ⚡ अभी सक्रिय: मुहूर्त संख्या {fmtNum(activeNum)}
+          </div>
+        )}
+      </div>
+
+      <Section title="दिन के 15 मुहूर्त (सूर्योदय → सूर्यास्त)" accent="#8b1a1a">
+        <NityaList items={day15} activeNum={activeNum} fmtTime={fmtTime} fmtNum={fmtNum} />
+      </Section>
+
+      <Section title="रात्रि के 15 मुहूर्त (सूर्यास्त → अगला सूर्योदय)" accent="#1e3a8a">
+        <NityaList items={night15} activeNum={activeNum} fmtTime={fmtTime} fmtNum={fmtNum} />
+      </Section>
+
+      <div className="mt-2 rounded-lg bg-stone-50 px-3 py-2 text-[11px] text-stone-600">
+        <span className="text-emerald-700 font-bold">शुभ</span> — सामान्यतः कार्यानुकूल · {" "}
+        <span className="text-amber-700 font-bold">अति-शुभ</span> — विशेष श्रेष्ठ · {" "}
+        <span className="text-rose-700 font-bold">अशुभ</span> — सावधानी, संयम
+      </div>
+    </div>
+  );
+}
+
+function NityaList({
+  items, activeNum, fmtTime, fmtNum,
+}: {
+  items: NonNullable<PanchangDay["nityaMuhurtas"]>;
+  activeNum: number | null;
+  fmtTime: (t: string | undefined | null) => string;
+  fmtNum: (n: string | number | null | undefined) => string;
+}) {
+  return (
+    <ul>
+      {items.map((m) => {
+        const isActive = activeNum === m.number;
+        const tone =
+          m.classification === "ati-shubh" ? { bg: "#fff6dc", fg: "#a16207", label: "अति-शुभ" } :
+          m.classification === "shubh"     ? { bg: "#f0fdf4", fg: "#15803d", label: "शुभ" } :
+                                             { bg: "#fff5f5", fg: "#b91c1c", label: "अशुभ" };
+        return (
+          <li
+            key={m.number}
+            className={`my-1 rounded-md border px-2 py-1.5 ${isActive ? "ring-2 ring-orange-400" : ""}`}
+            style={{ background: tone.bg, borderColor: `${tone.fg}33` }}
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="min-w-[1.5rem] text-right text-[13px] font-bold text-stone-700">
+                {fmtNum(m.number)}.
+              </span>
+              <span className="text-[15px] font-bold" style={{ color: tone.fg }}>
+                {m.nameHi}
+              </span>
+              <span
+                className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                style={{ background: tone.fg }}
+              >
+                {tone.label}
+              </span>
+            </div>
+            <div className="mt-0.5 flex items-baseline gap-2 pl-7">
+              <span className="font-mono text-[12px] text-stone-700">
+                {fmtTime(m.startTime)}–{fmtTime(m.endTime)}
+              </span>
+            </div>
+            <div className="mt-1 grid grid-cols-2 gap-2 pl-7 text-[12px]">
+              <div>
+                <span className="text-emerald-700">करें:</span>{" "}
+                <span className="text-stone-700">{m.doHi}</span>
+              </div>
+              <div>
+                <span className="text-rose-700">न करें:</span>{" "}
+                <span className="text-stone-700">{m.dontHi}</span>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Current local time in IST as minutes-since-midnight. Used to highlight the active muhurta. */
+function currentLocalMinutesIST(): number {
+  const now = new Date();
+  const istMs = now.getTime() + 5.5 * 3600 * 1000;
+  const ist = new Date(istMs);
+  return ist.getUTCHours() * 60 + ist.getUTCMinutes();
+}
+
+function hhmmToMin(s: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) return 0;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 }
 
 // ─── EventsHero (page 1) ─────────────────────────────────────────────────────
