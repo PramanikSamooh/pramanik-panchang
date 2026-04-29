@@ -245,9 +245,13 @@ export default function PanchangWidget({
     goToDate(nd);
   };
 
-  const fmtTime = (t: string | undefined | null) => formatTimeStr(t, timeFormat, numberStyle);
+  // Time context for the 24+ format — the day's sunrise, used to decide whether an early-morning
+  // end-time should be rendered as 26:30 (next morning, anchored to today's civil midnight)
+  // instead of 02:30. Only applied in "24plus" mode; ignored in 12h/24h modes.
+  const timeCtx = { sunriseHHMM: day.sunTimes?.sunrise };
+  const fmtTime = (t: string | undefined | null) => formatTimeStr(t, timeFormat, numberStyle, timeCtx);
   const fmtRange = (m: { start: string; end: string } | undefined | null) =>
-    m ? formatTimeRange(m.start, m.end, timeFormat, numberStyle) : "—";
+    m ? formatTimeRange(m.start, m.end, timeFormat, numberStyle, timeCtx) : "—";
   const fmtNum = (n: string | number | null | undefined) => formatNumberStr(n, numberStyle);
   /** Render a Hindi entity name; if `showEnglish`, append a subtle English subtitle. */
   const fmtBi = (hi: string | null | undefined, en: string | null | undefined): React.ReactNode => {
@@ -916,15 +920,20 @@ function SettingsModal({
           {/* Time format */}
           <div>
             <label className="mb-1.5 block text-[10px] uppercase tracking-wide text-stone-500">समय प्रारूप</label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => setTimeFormat("12h")}
-                className={`flex-1 rounded-lg py-2 text-xs ${timeFormat === "12h" ? "bg-orange-600 text-white" : "border border-stone-300 text-stone-700"}`}
-              >12-hour AM/PM</button>
+                className={`rounded-lg py-2 text-xs ${timeFormat === "12h" ? "bg-orange-600 text-white" : "border border-stone-300 text-stone-700"}`}
+              >12-घण्टा<br />AM/PM</button>
               <button
                 onClick={() => setTimeFormat("24h")}
-                className={`flex-1 rounded-lg py-2 text-xs ${timeFormat === "24h" ? "bg-orange-600 text-white" : "border border-stone-300 text-stone-700"}`}
-              >24-hour</button>
+                className={`rounded-lg py-2 text-xs ${timeFormat === "24h" ? "bg-orange-600 text-white" : "border border-stone-300 text-stone-700"}`}
+              >24-घण्टा<br />HH:MM</button>
+              <button
+                onClick={() => setTimeFormat("24plus")}
+                className={`rounded-lg py-2 text-xs ${timeFormat === "24plus" ? "bg-orange-600 text-white" : "border border-stone-300 text-stone-700"}`}
+                title="Drik panchang style — early next-morning times shown as 24+ hours (e.g. 26:30 instead of 02:30)"
+              >पञ्चांग<br />24+ शैली</button>
             </div>
           </div>
 

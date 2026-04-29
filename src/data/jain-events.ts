@@ -440,12 +440,15 @@ function generateVrats(): JainEvent[] {
     });
   }
 
-  // Shodash Karan Vrat — starts 4×/year on tithi (Paush/Phalguna/Vaishakha/Shravana) Shukla 14;
-  // ends ~15 days later on the next Krishna 1 of the next month. Seed as start+end markers.
+  // Shodash Karan Vrat — starts 3×/year on tithi (Pausha/Phalguna/Shravana) Shukla 14; ends
+  // ~15 days later on the next Krishna 1 of the following month. Seed as start+end markers.
+  // Verified against the 2026 तीर्थंकर वर्धमान जैन पंचांग which shows exactly these 3 cycles:
+  //   पौष शु. 14 (Jan 2) → माघ कृ. 1 (Jan 4)
+  //   फाल्गुन शु. 14 (Mar 2) → चैत्र कृ. 1 (Mar 4)
+  //   श्रावण शु. 14 (Aug 26-27 vriddhi) → भाद्रपद कृ. 1 (Aug 29)
   const SHODASH_KARAN = [
     { startMonth: "Pausha", startHi: "पौष", endMonth: "Magha", endHi: "माघ" },
     { startMonth: "Phalguna", startHi: "फाल्गुन", endMonth: "Chaitra", endHi: "चैत्र" },
-    { startMonth: "Vaishakha", startHi: "वैशाख", endMonth: "Jyeshtha", endHi: "ज्येष्ठ" },
     { startMonth: "Shravana", startHi: "श्रावण", endMonth: "Bhadrapada", endHi: "भाद्रपद" },
   ];
   for (const s of SHODASH_KARAN) {
