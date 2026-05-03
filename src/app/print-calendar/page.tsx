@@ -176,6 +176,22 @@ export default function PrintCalendarPage() {
     <div className="mx-auto max-w-7xl px-4 py-4">
       {/* ── Screen Controls (hidden in print) ── */}
       <div className="no-print space-y-5 mb-6">
+        {/* Banner showing exactly which dataset is loaded — prevents printing the wrong year
+            if the user generated a fresh dataset that didn't fit in localStorage. */}
+        {(() => {
+          const years = Array.from(new Set(panchangData.map((d) => d.date.split("-")[0]))).sort();
+          if (years.length === 0) return null;
+          const yearStr = years.length === 1 ? years[0] : `${years[0]} – ${years[years.length - 1]}`;
+          return (
+            <div className="rounded-lg border border-orange-700/40 bg-orange-950/30 px-4 py-2 text-sm text-orange-300">
+              <strong>Loaded panchang data:</strong> {yearStr} ({panchangData.length} days)
+              <span className="ml-2 text-xs text-gray-400">
+                · If this isn't the year you just generated, your browser storage may be full —
+                regenerate and download JSON manually.
+              </span>
+            </div>
+          );
+        })()}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-orange-500">Print Calendar</h1>

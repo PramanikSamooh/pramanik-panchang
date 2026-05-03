@@ -143,7 +143,23 @@ export default function Home() {
     }
 
     setPanchangData(data);
-    localStorage.setItem("pramanik_panchang_data", JSON.stringify(data));
+    // Persist to localStorage so /print-calendar can load it. The full PanchangDay schema
+    // is large (~10kb/day) and a year is ~3.5MB — close to the typical 5MB browser cap.
+    // If write fails (QuotaExceededError), clear the stale data and tell the user clearly,
+    // so they don't see an old year on the print page.
+    try {
+      localStorage.removeItem("pramanik_panchang_data");
+      localStorage.setItem("pramanik_panchang_data", JSON.stringify(data));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Storage failure — make sure stale data isn't lurking
+      try { localStorage.removeItem("pramanik_panchang_data"); } catch {}
+      alert(
+        `Generated ${data.length} days successfully, but couldn't save to browser storage ` +
+        `(${msg}). The data is in this tab only — please download JSON now to keep it. ` +
+        `The Print Calendar page will not see this dataset until storage is freed.`
+      );
+    }
     setGenerating(false);
   }, [genMode, year, startMonth, startYear, rangeMonths, locationIdx, customLat, customLng, customTz]);
 
@@ -243,12 +259,20 @@ export default function Home() {
           {genMode === "year" ? (
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-300">Year</label>
-              <select value={year} onChange={(e) => setYear(parseInt(e.target.value))}
-                className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
-                {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
+              <input
+                type="number"
+                value={year}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  if (!isNaN(v) && v >= 1900 && v <= 2200) setYear(v);
+                }}
+                min={1900}
+                max={2200}
+                step={1}
+                className="w-32 rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none"
+                placeholder="2026"
+              />
+              <p className="mt-1 text-[11px] text-gray-500">Any year from 1900 to 2200</p>
             </div>
           ) : (
             <>
@@ -261,12 +285,18 @@ export default function Home() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-300">Start Year</label>
-                <select value={startYear} onChange={(e) => setStartYear(parseInt(e.target.value))}
-                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none">
-                  {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
+                <input
+                  type="number"
+                  value={startYear}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value);
+                    if (!isNaN(v) && v >= 1900 && v <= 2200) setStartYear(v);
+                  }}
+                  min={1900}
+                  max={2200}
+                  step={1}
+                  className="w-28 rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm focus:border-orange-500 focus:outline-none"
+                />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-300">Duration</label>
