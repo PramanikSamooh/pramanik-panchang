@@ -61,7 +61,17 @@ export interface PanchangDay {
   sunNakshatra?: { number: number; nameHi: string; nameEn: string; entryTime?: string };
   specialYogas?: SpecialYogaPeriod[];
   panchak?: boolean;       // moon in Dhanishta(2nd half), Shatabhisha, P-Bhadra, U-Bhadra, Revati
-  bhadra?: { active: boolean; periods?: Array<{ startTime: string; endTime: string }> };
+  bhadra?: {
+    active: boolean;
+    periods?: Array<{
+      startTime: string;
+      endTime: string;
+      /** Bhadra is divided into mukh (head, most inauspicious), madhya (middle), puchchha
+       *  (tail, mildly auspicious for travel). When the bhadra period spans the day, we
+       *  emit one entry per sub-segment with this label. Optional — older entries omit it. */
+      part?: "mukh" | "madhya" | "puchchha";
+    }>;
+  };
   mool?: boolean;          // moon in gandanta nakshatras (Ashlesha, Magha, Jyeshtha, Mula, Revati, Ashwini)
 
   // ── Muhurta fields (for daily-share cards) ──
@@ -146,6 +156,41 @@ export interface PanchangDay {
     tithiHeadlineHi: string;   // e.g. "वैशाख शुक्ल त्रयोदशी"
     tithiHeadlineEn: string;   // e.g. "Vaishakha Shukla Trayodashi"
   };
+
+  // ── Planetary positions at sunrise (sidereal, Lahiri ayanamsa) ──
+  /** All 9 grahas with longitude, rashi, nakshatra, retrograde flag, and combust flag.
+   *  Order: Sun, Moon, Mars, Mercury, Jupiter, Venus, Saturn, Rahu, Ketu. */
+  planets?: Array<{
+    key: "sun" | "moon" | "mars" | "mercury" | "jupiter" | "venus" | "saturn" | "rahu" | "ketu";
+    nameHi: string;
+    nameEn: string;
+    /** Sidereal longitude (degrees within rashi, 0..30). Useful for display. */
+    degInRashi: number;
+    rashi: { number: number; nameHi: string; nameEn: string };
+    nakshatra: { number: number; nameHi: string; nameEn: string };
+    /** Daily speed sign — true if retrograde (vakri). Always false for Sun/Moon/Rahu/Ketu. */
+    retrograde: boolean;
+    /** True if the planet is combust (within combustion limit of the Sun). Sun/Rahu/Ketu = false. */
+    combust: boolean;
+  }>;
+
+  // ── 24-hour Hora ribbon (planetary hours) ──
+  /** Sequence of 24 horas spanning sunrise → next sunrise. The first 12 are day horas
+   *  (each = day-duration / 12) and the next 12 are night horas (each = night-duration / 12).
+   *  Each entry's `lord` is the planetary lord of that hora. */
+  horaRibbon?: Array<{
+    /** 1..24 */
+    number: number;
+    period: "day" | "night";
+    lordHi: string;
+    lordEn: string;
+    type: "shubh" | "ashubh" | "neutral";
+    startTime: string;
+    endTime: string;
+  }>;
+
+  // ── Dur-muhurta — 1–2 short (~48 min) inauspicious slots per day ──
+  durMuhurta?: Array<{ start: string; end: string; nameHi?: string; nameEn?: string }>;
 
   // ── 30 Nitya Muhurtas (15 day + 15 night, each ~48 minutes) ──
   // Day muhurtas (1..15) divide sunrise → sunset; night muhurtas (16..30) divide

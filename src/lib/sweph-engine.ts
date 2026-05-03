@@ -103,6 +103,12 @@ function sidLong(body: number, date: Date): number {
   return r.data[0];
 }
 
+/** Sidereal longitude + daily speed in one call. Speed sign tells us retrograde. */
+function sidLongAndSpeed(body: number, date: Date): { lon: number; speed: number } {
+  const r = sweph.calc_ut(dateToJD(date), body, SIDEREAL_FLAGS);
+  return { lon: r.data[0], speed: r.data[3] };
+}
+
 function tropLong(body: number, date: Date): number {
   const r = sweph.calc_ut(dateToJD(date), body, TROPICAL_FLAGS);
   return r.data[0];
@@ -791,6 +797,202 @@ function isDvipushkar(vara: number, naks: number, _tithi: number): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Planets, hora, dur-muhurta, bhadra mukh
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The 9 grahas in standard panchang order. Sweph body codes for each. */
+const PLANETS: Array<{
+  key: "sun" | "moon" | "mars" | "mercury" | "jupiter" | "venus" | "saturn" | "rahu" | "ketu";
+  body: number; // sweph body id
+  nameHi: string;
+  nameEn: string;
+  retrogradeable: boolean;
+  combustible: boolean;
+  /** Combustion limit in degrees (mean angular distance from Sun under which the planet is asta).
+   *  Standard Bhrigu/Sanhita values used in published Indian panchangs. */
+  combustLimit: number;
+}> = [
+  { key: "sun",     body: 0,                       nameHi: "सूर्य",   nameEn: "Sun",     retrogradeable: false, combustible: false, combustLimit: 0 },
+  { key: "moon",    body: 1,                       nameHi: "चन्द्र",  nameEn: "Moon",    retrogradeable: false, combustible: false, combustLimit: 0 },
+  { key: "mars",    body: 4,                       nameHi: "मंगल",   nameEn: "Mars",    retrogradeable: true,  combustible: true,  combustLimit: 17 },
+  { key: "mercury", body: 2,                       nameHi: "बुध",    nameEn: "Mercury", retrogradeable: true,  combustible: true,  combustLimit: 14 },
+  { key: "jupiter", body: 5,                       nameHi: "गुरु",   nameEn: "Jupiter", retrogradeable: true,  combustible: true,  combustLimit: 11 },
+  { key: "venus",   body: 3,                       nameHi: "शुक्र",  nameEn: "Venus",   retrogradeable: true,  combustible: true,  combustLimit: 10 },
+  { key: "saturn",  body: 6,                       nameHi: "शनि",    nameEn: "Saturn",  retrogradeable: true,  combustible: true,  combustLimit: 15 },
+  // Rahu = lunar north node (mean). Always retrograde-by-convention but shown as "—" since it's nominal.
+  // Ketu = Rahu + 180°. Computed below from Rahu.
+  { key: "rahu",    body: 11 /* SE_TRUE_NODE */,   nameHi: "राहु",   nameEn: "Rahu",    retrogradeable: false, combustible: false, combustLimit: 0 },
+  { key: "ketu",    body: -1 /* derived */,        nameHi: "केतु",   nameEn: "Ketu",    retrogradeable: false, combustible: false, combustLimit: 0 },
+];
+
+interface PlanetRow {
+  key: "sun" | "moon" | "mars" | "mercury" | "jupiter" | "venus" | "saturn" | "rahu" | "ketu";
+  nameHi: string;
+  nameEn: string;
+  degInRashi: number;
+  rashi: { number: number; nameHi: string; nameEn: string };
+  nakshatra: { number: number; nameHi: string; nameEn: string };
+  retrograde: boolean;
+  combust: boolean;
+}
+
+function computePlanets(sunrise: Date): PlanetRow[] {
+  const sunLon = sidLong(0, sunrise);
+  const out: PlanetRow[] = [];
+  for (const p of PLANETS) {
+    let lon: number;
+    let speed = 0;
+    if (p.key === "ketu") {
+      // Ketu = Rahu + 180°
+      const rahu = sidLongAndSpeed(11, sunrise);
+      lon = (rahu.lon + 180) % 360;
+    } else {
+      const r = sidLongAndSpeed(p.body, sunrise);
+      lon = r.lon;
+      speed = r.speed;
+    }
+    const rashiIdx = Math.floor(lon / 30);
+    const naksIdx = Math.floor(lon / (360 / 27));
+    const degInRashi = lon - rashiIdx * 30;
+    let combust = false;
+    if (p.combustible) {
+      let diff = Math.abs(((lon - sunLon + 540) % 360) - 180);
+      diff = 180 - diff; // shortest separation 0..180
+      combust = diff < p.combustLimit;
+    }
+    out.push({
+      key: p.key,
+      nameHi: p.nameHi,
+      nameEn: p.nameEn,
+      degInRashi,
+      rashi: { number: rashiIdx + 1, nameHi: RASHI_NAMES_HI[rashiIdx] || "", nameEn: RASHI_EN[rashiIdx] || "" },
+      nakshatra: { number: naksIdx + 1, nameHi: NAKSHATRA_NAMES_HI[naksIdx] || "", nameEn: NAKSHATRA_NAMES_EN[naksIdx] || "" },
+      retrograde: p.retrogradeable && speed < 0,
+      combust,
+    });
+  }
+  return out;
+}
+
+/** Build the 24-hour hora ribbon spanning sunrise → next sunrise. The vara's planetary
+ *  lord rules the first day-hora; subsequent horas follow the Chaldean order
+ *  Sat → Jup → Mars → Sun → Venus → Mercury → Moon → Sat... applied backward (i.e., the
+ *  next hora's lord is the next planet 4 positions ahead — equivalent to walking the
+ *  Chaldean cycle in reverse). Day horas are equal partitions of (sunset−sunrise)/12;
+ *  night horas of (next sunrise − sunset)/12. Each lord has a base shubh/ashubh quality
+ *  (Jupiter/Venus/Moon/Mercury = shubh; Mars/Saturn/Sun = ashubh; the rest neutral). */
+const CHALDEAN_ORDER: Array<{ en: string; hi: string; type: "shubh" | "ashubh" | "neutral" }> = [
+  { en: "Saturn",  hi: "शनि",    type: "ashubh" },
+  { en: "Jupiter", hi: "गुरु",   type: "shubh" },
+  { en: "Mars",    hi: "मंगल",   type: "ashubh" },
+  { en: "Sun",     hi: "सूर्य",  type: "ashubh" },
+  { en: "Venus",   hi: "शुक्र",  type: "shubh" },
+  { en: "Mercury", hi: "बुध",    type: "neutral" },
+  { en: "Moon",    hi: "चन्द्र", type: "shubh" },
+];
+function chaldeanIndexFor(varaLordEn: string): number {
+  return Math.max(0, CHALDEAN_ORDER.findIndex((p) => p.en === varaLordEn));
+}
+
+function computeHoraRibbon(
+  sunrise: Date,
+  sunset: Date,
+  nextSunrise: Date | null,
+  vara: number,
+  tz: number,
+): NonNullable<PanchangDay["horaRibbon"]> {
+  const out: NonNullable<PanchangDay["horaRibbon"]> = [];
+  const dayMs = sunset.getTime() - sunrise.getTime();
+  const nightMs = (nextSunrise?.getTime() ?? sunset.getTime() + dayMs) - sunset.getTime();
+  const dayHora = dayMs / 12;
+  const nightHora = nightMs / 12;
+  const startIdx = chaldeanIndexFor(VARA_LORD[vara].en);
+  // Day horas
+  for (let i = 0; i < 12; i++) {
+    const lord = CHALDEAN_ORDER[(startIdx + i) % 7];
+    const s = new Date(sunrise.getTime() + i * dayHora);
+    const e = new Date(sunrise.getTime() + (i + 1) * dayHora);
+    out.push({
+      number: i + 1,
+      period: "day",
+      lordEn: lord.en,
+      lordHi: lord.hi,
+      type: lord.type,
+      startTime: formatTime(s, tz),
+      endTime: formatTime(e, tz),
+    });
+  }
+  // Night horas continue the Chaldean cycle (no reset)
+  for (let i = 0; i < 12; i++) {
+    const lord = CHALDEAN_ORDER[(startIdx + 12 + i) % 7];
+    const s = new Date(sunset.getTime() + i * nightHora);
+    const e = new Date(sunset.getTime() + (i + 1) * nightHora);
+    out.push({
+      number: 13 + i,
+      period: "night",
+      lordEn: lord.en,
+      lordHi: lord.hi,
+      type: lord.type,
+      startTime: formatTime(s, tz),
+      endTime: formatTime(e, tz),
+    });
+  }
+  return out;
+}
+
+/** Dur-muhurta windows. Each weekday has a fixed pair of inauspicious "muhurta-slots"
+ *  inside the day half (sunrise → sunset divided into 15 muhurtas of 1/15th day-length each).
+ *  Slot indices are 1-based. Some weekdays have only one slot. Source: Vishvavallabha. */
+const DUR_MUHURTA_SLOTS: Record<number, number[]> = {
+  0: [14],            // Sun: 14th
+  1: [12, 14],        // Mon
+  2: [4, 8, 9],       // Tue
+  3: [5],             // Wed
+  4: [8, 9],          // Thu
+  5: [2, 8, 9],       // Fri
+  6: [1, 2],          // Sat
+};
+
+function computeDurMuhurta(sunrise: Date, sunset: Date, vara: number, tz: number): Array<{ start: string; end: string; nameHi: string; nameEn: string }> {
+  const slots = DUR_MUHURTA_SLOTS[vara] || [];
+  const muhurtaMs = (sunset.getTime() - sunrise.getTime()) / 15;
+  return slots.map((slot, i) => {
+    const start = new Date(sunrise.getTime() + (slot - 1) * muhurtaMs);
+    const end = new Date(sunrise.getTime() + slot * muhurtaMs);
+    return {
+      start: formatTime(start, tz),
+      end: formatTime(end, tz),
+      nameHi: slots.length > 1 ? `दुर्मुहूर्त ${i + 1}` : "दुर्मुहूर्त",
+      nameEn: slots.length > 1 ? `Dur-Muhurta ${i + 1}` : "Dur-Muhurta",
+    };
+  });
+}
+
+/** Split a bhadra raw period into mukh / madhya / puchchha sub-segments based on the
+ *  classical 5:2:1 (mukh:madhya:puchchha) duration ratio, normalized over the 8-part
+ *  classical bhadra division. Different schools use varying ratios; we use the most
+ *  common Drik convention. */
+function splitBhadraIntoParts(
+  startTime: string,
+  endTime: string,
+  startMs: number,
+  endMs: number,
+  tz: number,
+): Array<{ startTime: string; endTime: string; part: "mukh" | "madhya" | "puchchha" }> {
+  const total = endMs - startMs;
+  if (total <= 0) return [{ startTime, endTime, part: "madhya" }];
+  // Mukh = 5/8, Madhya = 2/8, Puchchha = 1/8
+  const mukhEnd = startMs + (5 / 8) * total;
+  const madhyaEnd = startMs + (7 / 8) * total;
+  const fmt = (ms: number) => formatTime(new Date(ms), tz);
+  return [
+    { startTime: fmt(startMs), endTime: fmt(mukhEnd), part: "mukh" },
+    { startTime: fmt(mukhEnd), endTime: fmt(madhyaEnd), part: "madhya" },
+    { startTime: fmt(madhyaEnd), endTime: fmt(endMs), part: "puchchha" },
+  ];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Per-day computation
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -865,21 +1067,30 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     specialYogas.push({ key: "dvipushkar", nameHi: "द्विपुष्कर योग", nameEn: "Dvipushkar Yoga", startTime: sunriseT, endTime: sunsetT });
   }
 
-  // Bhadra (Vishti karana) periods within the civil day — sample at 30-min intervals
-  const bhadraPeriods: Array<{ startTime: string; endTime: string }> = [];
+  // Bhadra (Vishti karana) periods within the civil day — sample at 30-min intervals,
+  // then split each contiguous Vishti window into mukh / madhya / puchchha.
+  type BhadraSeg = { startTime: string; endTime: string; part?: "mukh" | "madhya" | "puchchha" };
+  const bhadraPeriods: BhadraSeg[] = [];
+  const rawWindows: Array<{ startMs: number; endMs: number }> = [];
   let bhadraOpen: Date | null = null;
   for (let s = 0; s <= 48; s++) {
     const probe = new Date(date.getTime() + s * 30 * 60 * 1000);
     const isVishti = karanaInfoAt(probe).name === "Vishti";
     if (isVishti && !bhadraOpen) bhadraOpen = probe;
     else if (!isVishti && bhadraOpen) {
-      bhadraPeriods.push({ startTime: formatTime(bhadraOpen, loc.tz), endTime: formatTime(probe, loc.tz) });
+      rawWindows.push({ startMs: bhadraOpen.getTime(), endMs: probe.getTime() });
       bhadraOpen = null;
     }
   }
   if (bhadraOpen) {
     const endOfDay = new Date(date.getTime() + 24 * 3600 * 1000);
-    bhadraPeriods.push({ startTime: formatTime(bhadraOpen, loc.tz), endTime: formatTime(endOfDay, loc.tz) });
+    rawWindows.push({ startMs: bhadraOpen.getTime(), endMs: endOfDay.getTime() });
+  }
+  for (const w of rawWindows) {
+    const startStr = formatTime(new Date(w.startMs), loc.tz);
+    const endStr = formatTime(new Date(w.endMs), loc.tz);
+    const parts = splitBhadraIntoParts(startStr, endStr, w.startMs, w.endMs, loc.tz);
+    bhadraPeriods.push(...parts);
   }
   const isBhadraActive = bhadraPeriods.length > 0;
 
@@ -899,6 +1110,15 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
 
   // 30 Nitya Muhurtas (15 day + 15 night)
   const nityaMuhurtas = computeNityaMuhurtas(sunrise, sunset, nextSunrise, vara, loc.tz);
+
+  // Planet table at sunrise (longitude, rashi, nakshatra, retrograde, combust).
+  const planets = computePlanets(sunrise);
+
+  // 24-hour Hora ribbon (sunrise → next sunrise, day & night each split into 12 horas).
+  const horaRibbon = computeHoraRibbon(sunrise, sunset, nextSunrise, vara, loc.tz);
+
+  // Dur-muhurta — short inauspicious slots within the day half (1–3 per weekday).
+  const durMuhurta = computeDurMuhurta(sunrise, sunset, vara, loc.tz);
 
   // Karana / yoga sequences for the civil day (sunrise → next sunrise)
   const dayEnd = nextSunrise ?? new Date(sunrise.getTime() + DAY_MS);
@@ -1023,6 +1243,9 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     varaShoola: { direction: varaShoola.en, directionHi: varaShoola.hi },
     extraMuhurtas,
     nityaMuhurtas,
+    planets,
+    horaRibbon,
+    durMuhurta: durMuhurta.length > 0 ? durMuhurta : undefined,
   };
   return day;
 }

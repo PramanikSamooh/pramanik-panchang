@@ -189,10 +189,16 @@ export default function PanchangBody({
           fmtDate={fmtDate}
         />
 
+        {/* ── TL;DR verdict — combines tithi-pravritti, anandadi yoga, panchak/bhadra/mool, special yogas. ── */}
+        <SectionVerdict day={day} lang={lang} />
+
         {/* ── Block 1: Essential / Now (Jain practice first) ── */}
         {isToday && <SectionLiveNow day={day} lang={lang} isToday={isToday} nowMin={nowMin} fmt={fmt} />}
         <SectionRasTyag day={day} lang={lang} isToday={isToday} />
         <SectionEvents day={day} lang={lang} isToday={isToday} />
+
+        {/* Add-to-calendar (iCal export) shortcut */}
+        <AddToCalendar day={day} lang={lang} dateParam={dateParam} />
 
         <Grid2>
           <SectionTomorrow day={day} lang={lang} isToday={isToday} fmt={fmt} />
@@ -208,6 +214,9 @@ export default function PanchangBody({
           <SectionRashi day={day} lang={lang} fmt={fmt} />
         </Grid3>
 
+        {/* Planet table — sidereal longitude, rashi, nakshatra, retrograde, combust at sunrise */}
+        <SectionPlanets day={day} lang={lang} fmt={fmt} />
+
         <Grid3>
           <SectionCalendar day={day} lang={lang} fmt={fmt} />
           <SectionAuspicious day={day} lang={lang} fmt={fmt} />
@@ -221,7 +230,11 @@ export default function PanchangBody({
         </Grid3>
 
         <SectionChoghadiya day={day} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
+        <SectionHora day={day} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
         <SectionNitya day={day} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
+
+        {/* Glossary — collapsible help for the technical terms used above */}
+        <SectionGlossary lang={lang} />
 
         {debugMode && <SectionRawJson day={day} />}
         {!debugMode && (
@@ -836,9 +849,20 @@ function SectionPanchaAnga({ day, lang, fmt }: { day: PanchangDay; lang: Lang; f
       <KV label={t(lang, "तिथि प्रारम्भ", "Tithi start")} time={fmt.time(day.tithi.startTime)} mono />
       {day.kshayaTithi && (
         <KV label={t(lang, "क्षय तिथि", "Kshaya tithi")}
-            value={<><Badge text={badgeText(lang, "kshaya")} tone="amber" /> {bilingual(day.kshayaTithi.nameHi, day.kshayaTithi.nameEn, lang)}</>} />
+            value={<><Badge text={badgeText(lang, "kshaya")} tone="amber" /> {bilingual(day.kshayaTithi.nameHi, day.kshayaTithi.nameEn, lang)}
+              <span className="ml-2 text-[10px] font-normal italic text-stone-500">
+                {t(lang, "(अगली तिथि छूटी — आज में जोड़ी)", "(skipped tithi — merged into today)")}
+              </span>
+            </>} />
       )}
-      {day.isVriddhiRepeat && <KV label={t(lang, "वृद्धि", "Vriddhi")} value={<Badge text={t(lang, "पुनरावृत्ति दिन", "repeat day")} tone="blue" />} />}
+      {day.isVriddhiRepeat && (
+        <KV label={t(lang, "वृद्धि", "Vriddhi")}
+            value={<><Badge text={t(lang, "पुनरावृत्ति दिन", "repeat day")} tone="blue" />
+              <span className="ml-2 text-[10px] font-normal italic text-stone-500">
+                {t(lang, "(कल भी यही तिथि — व्रत/पर्व पहले दिन गिनें)", "(same tithi yesterday — count vrat/parva from the first day)")}
+              </span>
+            </>} />
+      )}
       <KV label={t(lang, "नक्षत्र", "Nakshatra")} value={`${bilingual(day.nakshatra?.nameHi, day.nakshatra?.nameEn, lang)} #${fmt.num(day.nakshatra?.number)}`} time={day.nakshatra?.endTime ? t(lang, `समाप्ति ${fmt.time(day.nakshatra.endTime)}`, `ends ${fmt.time(day.nakshatra.endTime)}`) : undefined} />
       <KV label={t(lang, "नक्षत्र पाद", "Nakshatra Pada")} value={day.nakshatraPada ? `${fmt.num(day.nakshatraPada)}/${fmt.num(4)}` : undefined} />
       <KV label={t(lang, "योग", "Yoga")} value={`${bilingual(day.yoga?.nameHi, day.yoga?.nameEn, lang)} #${fmt.num(day.yoga?.number)}`} time={day.yoga?.endTime ? t(lang, `समाप्ति ${fmt.time(day.yoga.endTime)}`, `ends ${fmt.time(day.yoga.endTime)}`) : undefined} />
@@ -852,7 +876,15 @@ function SectionPanchaAnga({ day, lang, fmt }: { day: PanchangDay; lang: Lang; f
             value={day.karanaSequence.map((k) => `${lang === "en" ? k.nameEn : k.nameHi} (→${fmt.time(k.endTime)})`).join(" · ")} />
       )}
       <KV label={t(lang, "वार", "Vara")} value={bilingual(day.varaHi, day.varaEn, lang)} />
-      <KV label={t(lang, "तिथि प्रवृत्ति", "Tithi Pravritti")} value={day.tithiPravritti ? bilingual(day.tithiPravritti.nameHi, day.tithiPravritti.nameEn, lang) : undefined} />
+      <KV label={t(lang, "तिथि प्रवृत्ति", "Tithi Pravritti")}
+          value={day.tithiPravritti ? <>
+            {bilingual(day.tithiPravritti.nameHi, day.tithiPravritti.nameEn, lang)}
+            <span className="ml-2 text-[10px] italic text-stone-500">
+              — {lang === "en"
+                  ? (TITHI_PRAVRITTI_HINTS[day.tithiPravritti.nameEn] ?? "")
+                  : (TITHI_PRAVRITTI_HINTS_HI[day.tithiPravritti.nameEn] ?? "")}
+            </span>
+          </> : undefined} />
     </CardSection>
   );
 }
@@ -910,6 +942,13 @@ function SectionCalendar({ day, lang, fmt }: { day: PanchangDay; lang: Lang; fmt
         label={t(lang, "अधिक मास", "Adhika Maas")}
         value={day.masaIsAdhika ? <Badge text={t(lang, "अधिक", "adhika")} tone="amber" /> : <Badge text={t(lang, "निज", "nija")} tone="stone" />}
       />
+      {day.masaIsAdhika && (
+        <div className="ml-2 text-[10px] italic text-amber-700">
+          {t(lang,
+            "अधिक मास में जैन व्रत/कल्याणक स्थगित — निज मास में मनाए जाते हैं।",
+            "In adhika maas, Jain vrats / kalyanaks are deferred to the nija (regular) month.")}
+        </div>
+      )}
       <KV label={t(lang, "VNS तिथि", "VNS date")} value={lang === "en" ? (day.vnsDateEn ?? day.vnsDateHi) : day.vnsDateHi} />
       <KV label={t(lang, "वी.नि. संवत्", "Vir Nirvan Sa.")} value={fmt.num(day.samvats?.virNirvan)} mono />
       <KV label={t(lang, "म. जन्म संवत्", "Mahavir Janma Sa.")} value={fmt.num(day.samvats?.mahavirJanma)} mono />
@@ -950,6 +989,11 @@ function SectionInauspicious({ day, lang, fmt }: { day: PanchangDay; lang: Lang;
       <KV label={t(lang, "कालवेला", "Kalvela")} time={fmt.range(day.muhurtas?.kalvela?.start, day.muhurtas?.kalvela?.end)} mono />
       <KV label={t(lang, "कण्टक / मृत्यु", "Kantak / Mrityu")} time={fmt.range(day.muhurtas?.kantakMrityu?.start, day.muhurtas?.kantakMrityu?.end)} mono />
       <KV label={t(lang, "यमघण्ट", "Yamghant")} time={fmt.range(day.muhurtas?.yamghant?.start, day.muhurtas?.yamghant?.end)} mono />
+      {day.durMuhurta && day.durMuhurta.length > 0 && day.durMuhurta.map((d, i) => (
+        <KV key={i}
+            label={day.durMuhurta!.length > 1 ? t(lang, `दुर्मुहूर्त ${i + 1}`, `Dur-Muhurta ${i + 1}`) : t(lang, "दुर्मुहूर्त", "Dur-Muhurta")}
+            time={fmt.range(d.start, d.end)} mono />
+      ))}
     </CardSection>
   );
 }
@@ -975,10 +1019,21 @@ function SectionPeriodFlags({ day, lang, fmt }: { day: PanchangDay; lang: Lang; 
       <KV label={t(lang, "पंचक", "Panchak")} value={day.panchak ? <Badge text={badgeText(lang, "active")} tone="red" /> : <Badge text={badgeText(lang, "inactive")} tone="stone" />} />
       <KV label={t(lang, "भद्रा (विष्टि)", "Bhadra (Vishti)")} value={day.bhadra?.active ? <Badge text={badgeText(lang, "active")} tone="red" /> : <Badge text={badgeText(lang, "inactive")} tone="stone" />} />
       {day.bhadra?.active && day.bhadra.periods && day.bhadra.periods.length > 0 && (
-        <div className="ml-2 mt-1">
-          {day.bhadra.periods.map((p, i) => (
-            <div key={i} className="text-xs font-mono text-stone-600">· {fmt.range(p.startTime, p.endTime)}</div>
-          ))}
+        <div className="ml-2 mt-1 space-y-0.5">
+          {day.bhadra.periods.map((p, i) => {
+            const partLabel = p.part
+              ? (lang === "en"
+                  ? (p.part === "mukh" ? "Mukh (head — most inauspicious)" : p.part === "madhya" ? "Madhya (middle)" : "Puchchha (tail — travel ok)")
+                  : (p.part === "mukh" ? "मुख (सर्वाधिक अशुभ)" : p.part === "madhya" ? "मध्य" : "पुच्छ (यात्रा शुभ)"))
+              : null;
+            const partTone = p.part === "mukh" ? "red" : p.part === "puchchha" ? "green" : "amber";
+            return (
+              <div key={i} className="flex items-baseline gap-2 text-xs">
+                <span className="font-mono text-stone-600">· {fmt.range(p.startTime, p.endTime)}</span>
+                {partLabel && <Badge text={partLabel} tone={partTone as "red" | "green" | "amber"} />}
+              </div>
+            );
+          })}
         </div>
       )}
       <KV label={t(lang, "मूल / गण्डान्त", "Mool / Gandanta")} value={day.mool ? <Badge text={badgeText(lang, "active")} tone="red" /> : <Badge text={badgeText(lang, "inactive")} tone="stone" />} />
@@ -1017,7 +1072,36 @@ function SectionChoghadiya({
         <ChoghadiyaTable label={t(lang, "दिन का चौघड़िया", "Day Choghadiya")} segments={day.choghadiya.day} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
         <ChoghadiyaTable label={t(lang, "रात्रि का चौघड़िया", "Night Choghadiya")} segments={day.choghadiya.night} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
       </div>
+      <ChoghadiyaGlossary lang={lang} />
     </Section>
+  );
+}
+
+// One-line "what is each choghadiya for" mini-legend, shown below the day/night tables.
+function ChoghadiyaGlossary({ lang }: { lang: Lang }) {
+  const ROWS: Array<{ key: string; nameHi: string; nameEn: string; type: "shubh" | "ashubh" | "neutral"; descHi: string; descEn: string }> = [
+    { key: "Amrit",  nameHi: "अमृत",   nameEn: "Amrit",  type: "shubh",   descHi: "सर्वोत्तम — कोई भी कार्य",            descEn: "Best — any beginning" },
+    { key: "Shubh",  nameHi: "शुभ",    nameEn: "Shubh",  type: "shubh",   descHi: "विवाह, गृहप्रवेश, पूजा",              descEn: "Marriage, housewarming, worship" },
+    { key: "Labh",   nameHi: "लाभ",    nameEn: "Labh",   type: "shubh",   descHi: "व्यापार, धन-सम्बन्धी कार्य",          descEn: "Business, financial dealings" },
+    { key: "Chal",   nameHi: "चल",     nameEn: "Chal",   type: "neutral", descHi: "यात्रा, सामान्य काम (मध्यम)",         descEn: "Travel, ordinary work (neutral)" },
+    { key: "Kaal",   nameHi: "काल",    nameEn: "Kaal",   type: "ashubh",  descHi: "वर्जित — कोई शुभ आरम्भ नहीं",         descEn: "Avoid — no auspicious starts" },
+    { key: "Rog",    nameHi: "रोग",    nameEn: "Rog",    type: "ashubh",  descHi: "रोग-योग, चिकित्सा-कार्य ही करें",     descEn: "Disease aspect — only medical work" },
+    { key: "Udveg",  nameHi: "उद्वेग", nameEn: "Udveg",  type: "ashubh",  descHi: "तनाव, विवाद — आरम्भ न करें",           descEn: "Stress, disputes — avoid starts" },
+  ];
+  return (
+    <div className="mt-3 rounded border border-stone-200 bg-stone-50 p-2">
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-stone-500">
+        {t(lang, "चौघड़िया — किसके लिए शुभ?", "Choghadiya — what each is for")}
+      </div>
+      <ul className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-[11px] sm:grid-cols-2">
+        {ROWS.map((r) => (
+          <li key={r.key} className="flex items-baseline gap-2">
+            <Badge text={badgeText(lang, r.nameEn)} tone={r.type === "shubh" ? "green" : r.type === "ashubh" ? "red" : "stone"} />
+            <span className="text-stone-700">{lang === "en" ? r.descEn : r.descHi}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -1099,8 +1183,8 @@ function NityaTable({
             <th className="pb-1 font-semibold">{t(lang, "नाम", "Name")}</th>
             <th className="pb-1 font-semibold">{t(lang, "वर्ग", "Class")}</th>
             <th className="pb-1 font-semibold">{t(lang, "समय", "Time")}</th>
-            <th className="pb-1 font-semibold">{t(lang, "करें", "Do")}</th>
-            <th className="pb-1 font-semibold">{t(lang, "न करें", "Don't")}</th>
+            <th className="pb-1 pr-2 font-semibold text-emerald-700">✓ {t(lang, "करें", "Do")}</th>
+            <th className="border-l border-stone-300 pb-1 pl-2 font-semibold text-rose-700">✕ {t(lang, "न करें", "Don't")}</th>
           </tr>
         </thead>
         <tbody>
@@ -1115,8 +1199,8 @@ function NityaTable({
                 </td>
                 <td className="py-1"><Badge text={badgeText(lang, m.classification)} tone={tone} /></td>
                 <td className="py-1 font-mono text-stone-600">{fmt.range(m.startTime, m.endTime)}</td>
-                <td className="py-1 text-stone-700">{lang === "en" ? (m.doEn ?? m.doHi) : m.doHi}</td>
-                <td className="py-1 text-stone-700">{lang === "en" ? (m.dontEn ?? m.dontHi) : m.dontHi}</td>
+                <td className="py-1 pr-2 text-emerald-800">{lang === "en" ? (m.doEn ?? m.doHi) : m.doHi}</td>
+                <td className="border-l border-stone-200 py-1 pl-2 text-rose-800">{lang === "en" ? (m.dontEn ?? m.dontHi) : m.dontHi}</td>
               </tr>
             );
           })}
@@ -1136,5 +1220,285 @@ function SectionRawJson({ day }: { day: PanchangDay }) {
         </pre>
       </details>
     </Section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Verdict — TL;DR card combining tithi-pravritti / anandadi yoga / panchak-bhadra-mool
+// / specialYogas into one one-line headline + an overall favorable/mixed/inauspicious tone.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SectionVerdict({ day, lang }: { day: PanchangDay; lang: Lang }) {
+  const positives: string[] = [];
+  const negatives: string[] = [];
+  if (day.tithiPravritti) {
+    const hint = TITHI_PRAVRITTI_HINTS[day.tithiPravritti.nameEn] ?? "";
+    if (hint) positives.push(`${lang === "en" ? day.tithiPravritti.nameEn : day.tithiPravritti.nameHi} — ${lang === "en" ? hint : (TITHI_PRAVRITTI_HINTS_HI[day.tithiPravritti.nameEn] ?? hint)}`);
+  }
+  if (day.anandadiYoga) {
+    if (day.anandadiYoga.type === "shubh") positives.push(`${bilingual(day.anandadiYoga.nameHi, day.anandadiYoga.name, lang)} (${badgeText(lang, "shubh")})`);
+    else negatives.push(`${bilingual(day.anandadiYoga.nameHi, day.anandadiYoga.name, lang)} (${badgeText(lang, "ashubh")})`);
+  }
+  for (const sy of day.specialYogas ?? []) {
+    positives.push(bilingual(sy.nameHi, sy.nameEn, lang));
+  }
+  if (day.panchak) negatives.push(t(lang, "पंचक", "Panchak"));
+  if (day.bhadra?.active) negatives.push(t(lang, "भद्रा", "Bhadra"));
+  if (day.mool) negatives.push(t(lang, "मूल / गण्डान्त", "Mool / Gandanta"));
+
+  const verdict: { tone: "green" | "amber" | "red"; labelHi: string; labelEn: string } =
+    negatives.length === 0 && positives.length > 0
+      ? { tone: "green", labelHi: "अनुकूल दिन", labelEn: "Favorable day" }
+      : negatives.length > 0 && positives.length > 0
+      ? { tone: "amber", labelHi: "मिश्रित दिन — सतर्क रहें", labelEn: "Mixed — proceed mindfully" }
+      : negatives.length > 0
+      ? { tone: "red", labelHi: "सावधानी का दिन", labelEn: "Use caution" }
+      : { tone: "green", labelHi: "सामान्य दिन", labelEn: "Ordinary day" };
+
+  const accent = verdict.tone === "green" ? "#15803d" : verdict.tone === "amber" ? "#b45309" : "#b91c1c";
+  return (
+    <Section
+      title={t(lang, "आज का सार", "Today's verdict")}
+      hint={t(lang, "तिथि-प्रवृत्ति, आनंदादि योग, पंचक/भद्रा/मूल और विशेष योगों का संक्षेप",
+                   "Summary of tithi-pravritti, anandadi yoga, panchak/bhadra/mool, and special yogas")}
+      accent={accent}
+    >
+      <div className="mb-2 text-base font-bold" style={{ color: accent }}>
+        {t(lang, verdict.labelHi, verdict.labelEn)}
+      </div>
+      {positives.length > 0 && (
+        <div className="mb-1 text-xs text-emerald-900">
+          <strong className="text-emerald-700">✓ {t(lang, "अनुकूल:", "Favorable:")}</strong> {positives.join(" · ")}
+        </div>
+      )}
+      {negatives.length > 0 && (
+        <div className="text-xs text-rose-900">
+          <strong className="text-rose-700">⚠ {t(lang, "सावधानी:", "Caution:")}</strong> {negatives.join(" · ")}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// One-line "what is it for" hints for each tithi-pravritti category.
+const TITHI_PRAVRITTI_HINTS: Record<string, string> = {
+  Nanda: "joy, celebration, music",
+  Bhadra: "service, healing, journeys",
+  Jaya: "victory, contracts, debate",
+  Rikta: "destruction, demolition (avoid auspicious starts)",
+  Purna: "completion, rituals, fulfillment",
+};
+const TITHI_PRAVRITTI_HINTS_HI: Record<string, string> = {
+  Nanda: "उत्सव, संगीत, आनंद",
+  Bhadra: "सेवा, चिकित्सा, यात्रा",
+  Jaya: "विजय, अनुबंध, वाद-विवाद",
+  Rikta: "रिक्तता — शुभ कार्य आरम्भ न करें",
+  Purna: "पूर्णता, अनुष्ठान, सम्पन्नता",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Planets — sidereal longitude, rashi, nakshatra, retrograde, combust at sunrise
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SectionPlanets({ day, lang, fmt }: { day: PanchangDay; lang: Lang; fmt: Fmt }) {
+  if (!day.planets || day.planets.length === 0) return null;
+  return (
+    <Section
+      title={t(lang, "ग्रह स्थिति (सूर्योदय)", "Planet positions (at sunrise)")}
+      hint={t(lang, "लाहिरी अयनांश; डिग्री राशि के भीतर", "Lahiri ayanamsa; degrees within the rashi")}
+      accent="#0c4a6e"
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="border-b border-stone-300 text-left text-stone-600">
+            <tr>
+              <th className="pb-1 font-semibold">{t(lang, "ग्रह", "Planet")}</th>
+              <th className="pb-1 font-semibold">{t(lang, "राशि", "Rashi")}</th>
+              <th className="pb-1 text-right font-semibold">°</th>
+              <th className="pb-1 font-semibold">{t(lang, "नक्षत्र", "Nakshatra")}</th>
+              <th className="pb-1 font-semibold">{t(lang, "वक्री", "Retro")}</th>
+              <th className="pb-1 font-semibold">{t(lang, "अस्त", "Combust")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {day.planets.map((p) => (
+              <tr key={p.key} className="border-b border-dotted border-stone-200 last:border-0">
+                <td className="py-1 font-bold">{bilingual(p.nameHi, p.nameEn, lang)}</td>
+                <td className="py-1">{bilingual(p.rashi.nameHi, p.rashi.nameEn, lang)}</td>
+                <td className="py-1 text-right font-mono text-stone-700">{fmt.num(p.degInRashi.toFixed(2))}°</td>
+                <td className="py-1">{bilingual(p.nakshatra.nameHi, p.nakshatra.nameEn, lang)}</td>
+                <td className="py-1">{p.retrograde ? <Badge text={t(lang, "वक्री", "R")} tone="amber" /> : <span className="text-stone-400">—</span>}</td>
+                <td className="py-1">{p.combust ? <Badge text={t(lang, "अस्त", "Asta")} tone="red" /> : <span className="text-stone-400">—</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[10px] text-stone-500">
+        {t(lang,
+          "वक्री = ग्रह पीछे चल रहा हो (नई शुरुआत स्थगित)। अस्त = ग्रह सूर्य के अत्यधिक निकट (विवाह/पूजा/प्रतिष्ठा कार्य वर्जित)।",
+          "R = retrograde (delay new ventures). Combust = planet too close to the Sun (avoid marriages, consecrations, major rituals).")}
+      </p>
+    </Section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 24-hour Hora ribbon
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SectionHora({ day, lang, nowMin, isToday, fmt }: { day: PanchangDay; lang: Lang; nowMin: number; isToday: boolean; fmt: Fmt }) {
+  if (!day.horaRibbon || day.horaRibbon.length === 0) return null;
+  const dayH = day.horaRibbon.filter((h) => h.period === "day");
+  const nightH = day.horaRibbon.filter((h) => h.period === "night");
+  return (
+    <Section
+      title={t(lang, "होरा (24 घंटे)", "Hora (24 hours)")}
+      hint={t(lang, "ग्रह-होरा — दिन व रात्रि के 12-12 भाग; प्रत्येक होरा का स्वामी ग्रह",
+                   "Planetary hours — 12 day + 12 night; each hora ruled by a planet")}
+      accent="#312e81"
+    >
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <HoraTable label={t(lang, "दिन की 12 होरा", "Day horas")} rows={dayH} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
+        <HoraTable label={t(lang, "रात्रि की 12 होरा", "Night horas")} rows={nightH} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
+      </div>
+      <p className="mt-2 text-[10px] text-stone-500">
+        {t(lang,
+          "बृहस्पति/शुक्र/चन्द्र/बुध की होरा शुभ; मंगल/शनि/सूर्य की होरा अशुभ। कार्य उसी ग्रह की होरा में करें।",
+          "Jupiter/Venus/Moon/Mercury horas are shubh; Mars/Saturn/Sun horas are ashubh. Match work to the right planet's hour.")}
+      </p>
+    </Section>
+  );
+}
+
+function HoraTable({
+  label, rows, lang, nowMin, isToday, fmt,
+}: {
+  label: string;
+  rows: NonNullable<PanchangDay["horaRibbon"]>;
+  lang: Lang;
+  nowMin: number;
+  isToday: boolean;
+  fmt: Fmt;
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-bold text-stone-700">{label}</div>
+      <table className="w-full text-xs">
+        <thead className="border-b border-stone-300 text-left text-stone-600">
+          <tr>
+            <th className="pb-1 font-semibold">#</th>
+            <th className="pb-1 font-semibold">{t(lang, "स्वामी", "Lord")}</th>
+            <th className="pb-1 font-semibold">{t(lang, "वर्ग", "Type")}</th>
+            <th className="pb-1 text-right font-semibold">{t(lang, "समय", "Time")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((h) => {
+            const active = isToday && isActiveWindow(nowMin, h.startTime, h.endTime);
+            const tone = h.type === "shubh" ? "green" : h.type === "ashubh" ? "red" : "stone";
+            return (
+              <tr key={h.number} className={`border-b border-dotted border-stone-200 last:border-0 ${active ? "bg-orange-50" : ""}`}>
+                <td className="py-1 font-mono">{fmt.num(h.number)}{active && " ⚡"}</td>
+                <td className="py-1 font-bold">{bilingual(h.lordHi, h.lordEn, lang)}</td>
+                <td className="py-1"><Badge text={badgeText(lang, h.type)} tone={tone} /></td>
+                <td className="py-1 text-right font-mono text-stone-600">{fmt.range(h.startTime, h.endTime)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Glossary — collapsible help panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GLOSSARY: Array<{ termHi: string; termEn: string; descHi: string; descEn: string }> = [
+  { termHi: "तिथि", termEn: "Tithi", descHi: "चन्द्र-दिन; सूर्य-चन्द्र अंतर का 12° का खंड। 1-15 शुक्ल पक्ष + 1-15 कृष्ण पक्ष = 30 तिथियाँ।",
+    descEn: "Lunar day. 12° increment of moon-sun separation. 30 tithis in a lunar month (15 waxing + 15 waning)." },
+  { termHi: "नक्षत्र", termEn: "Nakshatra", descHi: "27 तारा-समूह; आकाश का 360°/27 = 13°20' खंड जिसमें चन्द्र स्थित हो।",
+    descEn: "27 lunar mansions, each spanning 13°20'. Tells where the moon is in the zodiac." },
+  { termHi: "योग", termEn: "Yoga", descHi: "सूर्य-चन्द्र की जुड़ी अंशों का खंड। 27 योग; प्रत्येक का अपना शुभ/अशुभ स्वभाव।",
+    descEn: "Sum of sun & moon longitudes; 27 yogas, each with its own auspicious/inauspicious nature." },
+  { termHi: "करण", termEn: "Karana", descHi: "तिथि का आधा भाग। 11 करण; भद्रा (विष्टि) सबसे अशुभ।",
+    descEn: "Half-tithi. 11 karanas; Vishti (Bhadra) is the most inauspicious." },
+  { termHi: "होरा", termEn: "Hora", descHi: "दिन/रात्रि के 24 घंटे, प्रत्येक एक ग्रह के स्वामित्व में। शुभ कार्य उसी ग्रह की होरा में करें।",
+    descEn: "24 planetary hours. Time matching the planet whose blessing you seek." },
+  { termHi: "राहु काल", termEn: "Rahu Kalam", descHi: "दिन का अशुभ डेढ़-घंटे का खंड (वार-आधारित)। नई शुरुआत वर्जित।",
+    descEn: "Inauspicious 90-minute slot per day (varies by weekday). Avoid new ventures." },
+  { termHi: "अभिजित", termEn: "Abhijit", descHi: "मध्यान्ह का सर्वोत्तम मुहूर्त (~48 मिनट)। बुधवार को छोड़ अधिकांश कार्यों के लिए शुभ।",
+    descEn: "Most auspicious midday muhurta (~48 min). Favorable for most actions except on Wednesdays." },
+  { termHi: "ब्रह्म मुहूर्त", termEn: "Brahma Muhurta", descHi: "सूर्योदय से ~96 मिनट पहले। ध्यान, अध्ययन के लिए सर्वोत्तम।",
+    descEn: "~96 minutes before sunrise. Optimal for meditation, study, sadhana." },
+  { termHi: "पंचक", termEn: "Panchak", descHi: "चन्द्र धनिष्ठा (२)–रेवती में हो (5 नक्षत्र)। दक्षिण यात्रा, ईंधन-संग्रह, चारपाई-बनाना वर्जित।",
+    descEn: "Moon in last 5 nakshatras (Dhanishta(2)..Revati). Avoid southbound travel, fuel storage, bed-making." },
+  { termHi: "भद्रा", termEn: "Bhadra", descHi: "विष्टि करण सक्रिय। कोई भी शुभ कार्य वर्जित। मुख-भाग सर्वाधिक अशुभ; पुच्छ-भाग में यात्रा शुभ।",
+    descEn: "Vishti karana active. Avoid all auspicious work. Mukh (head) most inauspicious; puchchha (tail) acceptable for travel." },
+  { termHi: "मूल / गण्डान्त", termEn: "Mool / Gandanta", descHi: "चन्द्र मूल नक्षत्र (अश्विनी, आश्लेषा, मघा, ज्येष्ठा, मूल, रेवती) में। यज्ञोपवीत, गृहप्रवेश वर्जित।",
+    descEn: "Moon in transition-junction nakshatras. Avoid sacred-thread, housewarming, marriage." },
+  { termHi: "वक्री", termEn: "Retrograde (Vakri)", descHi: "ग्रह पृथ्वी से देखते हुए पीछे चलता दिखे। नई शुरुआत स्थगित, समीक्षा/पुनरावलोकन शुभ।",
+    descEn: "Planet appears to move backward from Earth. Delay new starts; review and revise instead." },
+  { termHi: "अस्त", termEn: "Combust (Asta)", descHi: "ग्रह सूर्य के अत्यधिक निकट (तेज नष्ट)। विवाह, प्रतिष्ठा, पूजा-कर्म वर्जित।",
+    descEn: "Planet too close to the Sun (energy obscured). Avoid marriages, consecrations, major rituals." },
+  { termHi: "चौघड़िया", termEn: "Choghadiya", descHi: "दिन व रात्रि के 8-8 भाग। अमृत/शुभ/लाभ शुभ; काल/रोग/उद्वेग अशुभ; चल मध्यम।",
+    descEn: "8 day + 8 night segments. Amrit/Shubh/Labh good; Kaal/Rog/Udveg bad; Chal neutral." },
+  { termHi: "नित्य मुहूर्त", termEn: "Nitya Muhurta", descHi: "30 दो-घटी मुहूर्त (15 दिन + 15 रात्रि)। प्रत्येक का अपना नाम, स्वभाव, करें/न करें।",
+    descEn: "30 two-ghati muhurtas (15 day + 15 night). Each has its own name, nature, and do/don't list." },
+  { termHi: "तिथि प्रवृत्ति", termEn: "Tithi Pravritti", descHi: "तिथि-समूह का स्वभाव — नंदा, भद्रा, जया, रिक्ता, पूर्णा।",
+    descEn: "Quality of the tithi group: Nanda (joy), Bhadra (service), Jaya (victory), Rikta (avoid), Purna (completion)." },
+  { termHi: "अनंदादि योग", termEn: "Anandadi Yoga", descHi: "वार × नक्षत्र संयोग का 28-चक्र; प्रत्येक का अपना शुभ/अशुभ नाम।",
+    descEn: "28-cycle vara×nakshatra combo with named auspicious/inauspicious effect." },
+  { termHi: "विशेष योग", termEn: "Special Yogas", descHi: "रवि, सर्वार्थसिद्धि, अमृत-सिद्धि, रवि/गुरु पुष्य, त्रि/द्वि-पुष्कर — विशेष शुभ संयोग।",
+    descEn: "Ravi, Sarvarthasiddhi, Amrit-siddhi, Ravi/Guru Pushya, Tri/Dvi-pushkar — exceptionally auspicious vara×nakshatra combos." },
+  { termHi: "दिशा शूल", termEn: "Disha Shool", descHi: "वार-आधारित 'अशुभ दिशा'। उस दिशा में यात्रा वर्जित।",
+    descEn: "Weekday-based 'forbidden direction'. Avoid travel toward it that day." },
+  { termHi: "आचमन / मुहूर्त", termEn: "Muhurta", descHi: "एक मुहूर्त ≈ 48 मिनट = 2 घटी = 1/30 दिन।",
+    descEn: "One muhurta ≈ 48 min = 2 ghati = 1/30 of the day." },
+];
+
+function SectionGlossary({ lang }: { lang: Lang }) {
+  return (
+    <Section
+      title={t(lang, "शब्दकोश — पंचांग के शब्द", "Glossary — panchang terms")}
+      hint={t(lang, "हर शब्द का संक्षिप्त अर्थ", "Brief meaning of each term used above")}
+      accent="#475569"
+    >
+      <details>
+        <summary className="cursor-pointer text-xs font-semibold text-stone-700 hover:underline">
+          {t(lang, "खोलें / बंद करें", "Open / close")}
+        </summary>
+        <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
+          {GLOSSARY.map((g) => (
+            <div key={g.termEn}>
+              <dt className="text-xs font-bold text-stone-800">{lang === "en" ? g.termEn : g.termHi}{lang === "both" && <span className="ml-1 text-[10px] font-normal text-stone-500">{g.termEn}</span>}</dt>
+              <dd className="text-[11px] text-stone-600">{lang === "en" ? g.descEn : g.descHi}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+    </Section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add-to-calendar — generates a /api/ical?date=YYYY-MM-DD download for the day's events.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AddToCalendar({ day, lang, dateParam }: { day: PanchangDay; lang: Lang; dateParam: string }) {
+  const url = `/api/ical?date=${dateParam}`;
+  return (
+    <div className="mt-3 flex items-center justify-end">
+      <a
+        href={url}
+        download={`panchang-${day.date}.ics`}
+        className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+        title={t(lang, "इस दिन के पर्व/मुहूर्त .ics के रूप में डाउनलोड करें", "Download this day's events / muhurtas as .ics")}
+      >
+        📅 {t(lang, "कैलेंडर में जोड़ें (.ics)", "Add to Calendar (.ics)")}
+      </a>
+    </div>
   );
 }
