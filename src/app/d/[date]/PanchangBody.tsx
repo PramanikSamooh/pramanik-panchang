@@ -1236,8 +1236,17 @@ function SectionVerdict({ day, lang }: { day: PanchangDay; lang: Lang }) {
     if (hint) positives.push(`${lang === "en" ? day.tithiPravritti.nameEn : day.tithiPravritti.nameHi} — ${lang === "en" ? hint : (TITHI_PRAVRITTI_HINTS_HI[day.tithiPravritti.nameEn] ?? hint)}`);
   }
   if (day.anandadiYoga) {
-    if (day.anandadiYoga.type === "shubh") positives.push(`${bilingual(day.anandadiYoga.nameHi, day.anandadiYoga.name, lang)} (${badgeText(lang, "shubh")})`);
-    else negatives.push(`${bilingual(day.anandadiYoga.nameHi, day.anandadiYoga.name, lang)} (${badgeText(lang, "ashubh")})`);
+    // Always prefix the yoga's classical name with "अनंदादि योग:" so a name like
+    // "मृत्यु" / "Mrityu" reads as a yoga label, not a literal prediction. Also
+    // append a one-line gloss explaining what the auspicious/inauspicious nature
+    // implies for activity.
+    const labelHi = `अनंदादि योग: ${day.anandadiYoga.nameHi}`;
+    const labelEn = `Anandadi Yoga: ${day.anandadiYoga.name}`;
+    if (day.anandadiYoga.type === "shubh") {
+      positives.push(`${bilingual(labelHi, labelEn, lang)} — ${t(lang, "नई शुरुआत के लिए अनुकूल", "favorable for new starts")}`);
+    } else {
+      negatives.push(`${bilingual(labelHi, labelEn, lang)} — ${t(lang, "महत्वपूर्ण कार्य स्थगित करें", "defer important undertakings")}`);
+    }
   }
   for (const sy of day.specialYogas ?? []) {
     positives.push(bilingual(sy.nameHi, sy.nameEn, lang));
