@@ -968,13 +968,6 @@ function SectionAuspicious({ day, lang, fmt }: { day: PanchangDay; lang: Lang; f
       <KV label={t(lang, "प्रातः सन्ध्या", "Pratah Sandhya")} time={fmt.range(day.extraMuhurtas?.pratahSandhya?.start, day.extraMuhurtas?.pratahSandhya?.end)} mono />
       <KV label={t(lang, "सायं सन्ध्या", "Sayahna Sandhya")} time={fmt.range(day.extraMuhurtas?.sayahnaSandhya?.start, day.extraMuhurtas?.sayahnaSandhya?.end)} mono />
       <KV label={t(lang, "निशीथ काल", "Nishita Kaal")} time={fmt.range(day.extraMuhurtas?.nishitaKaal?.start, day.extraMuhurtas?.nishitaKaal?.end)} mono />
-      <KV
-        label={t(lang, "आनंदादि योग", "Anandadi Yoga")}
-        value={day.anandadiYoga ? <>
-          {bilingual(day.anandadiYoga.nameHi, day.anandadiYoga.name, lang)}{" "}
-          <Badge text={badgeText(lang, day.anandadiYoga.type)} tone={day.anandadiYoga.type === "shubh" ? "green" : "red"} />
-        </> : undefined}
-      />
     </CardSection>
   );
 }
@@ -1015,7 +1008,7 @@ function SectionDirections({ day, lang }: { day: PanchangDay; lang: Lang }) {
 
 function SectionPeriodFlags({ day, lang, fmt }: { day: PanchangDay; lang: Lang; fmt: Fmt }) {
   return (
-    <CardSection title={t(lang, "पंचक · भद्रा · मूल", "Panchak · Bhadra · Mool")}>
+    <CardSection title={t(lang, "दिन के योग-संकेत", "Today's Yoga Indicators")} hint={t(lang, "शुभ-अशुभ — पंचक · भद्रा · मूल · आनंदादि", "Mixed flags — panchak · bhadra · mool · anandadi")}>
       <KV label={t(lang, "पंचक", "Panchak")} value={day.panchak ? <Badge text={badgeText(lang, "active")} tone="red" /> : <Badge text={badgeText(lang, "inactive")} tone="stone" />} />
       <KV label={t(lang, "भद्रा (विष्टि)", "Bhadra (Vishti)")} value={day.bhadra?.active ? <Badge text={badgeText(lang, "active")} tone="red" /> : <Badge text={badgeText(lang, "inactive")} tone="stone" />} />
       {day.bhadra?.active && day.bhadra.periods && day.bhadra.periods.length > 0 && (
@@ -1037,6 +1030,13 @@ function SectionPeriodFlags({ day, lang, fmt }: { day: PanchangDay; lang: Lang; 
         </div>
       )}
       <KV label={t(lang, "मूल / गण्डान्त", "Mool / Gandanta")} value={day.mool ? <Badge text={badgeText(lang, "active")} tone="red" /> : <Badge text={badgeText(lang, "inactive")} tone="stone" />} />
+      {day.anandadiYoga && (
+        <KV label={t(lang, "आनंदादि योग", "Anandadi Yoga")}
+            value={<>
+              {bilingual(day.anandadiYoga.nameHi, day.anandadiYoga.name, lang)}{" "}
+              <Badge text={badgeText(lang, day.anandadiYoga.type)} tone={day.anandadiYoga.type === "shubh" ? "green" : "red"} />
+            </>} />
+      )}
     </CardSection>
   );
 }
