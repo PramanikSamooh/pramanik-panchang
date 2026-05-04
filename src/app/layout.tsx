@@ -20,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/" className="text-gray-400 hover:text-orange-400">Generate</a>
               <a href="/events" className="text-gray-400 hover:text-orange-400">Events Master</a>
               <a href="/print-calendar" className="text-gray-400 hover:text-orange-400">Print Calendar</a>
+              <a href="/learn" className="text-gray-400 hover:text-orange-400">Learn</a>
             </div>
           </div>
         </nav>
