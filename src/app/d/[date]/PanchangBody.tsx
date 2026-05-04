@@ -276,6 +276,15 @@ function Header({
           {lang !== "hi" && <span className="ml-2 text-base font-normal text-stone-700">{BRAND.shortEn}</span>}
         </h1>
         <div className="flex flex-col items-end gap-2 text-xs">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <a
+              href="/learn"
+              className="rounded-full border border-amber-400 bg-amber-50 px-3 py-0.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+              title={t(lang, "पंचांग देखना सीखें — पुस्तक", "Learn to see Panchang — the book")}
+            >
+              📖 {t(lang, "पंचांग देखना सीखें", "Learn to see Panchang")}
+            </a>
+          </div>
           <InlineSettings
             dateParam={dateParam}
             currentLang={lang}
