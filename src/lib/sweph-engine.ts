@@ -1475,10 +1475,10 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
     }
   }
 
-  // Upcoming events
+  // Upcoming events — up to 14 days ahead (capped by the generated window).
   for (let i = 0; i < allDays.length; i++) {
     const upcoming: UpcomingEvent[] = [];
-    for (let j = i + 1; j < Math.min(i + 31, allDays.length); j++) {
+    for (let j = i + 1; j < Math.min(i + 15, allDays.length); j++) {
       for (const evt of allDays[j].todayEvents) {
         upcoming.push({ eventId: evt.eventId, nameHi: evt.nameHi, nameEn: evt.nameEn, date: allDays[j].date });
       }
@@ -1517,10 +1517,11 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function computeSingleDay(date: Date, events: JainEvent[], location: LocationConfig): PanchangDay | null {
-  // For a single day, generate a small window so kshaya/vriddhi/transit detection works.
-  // 5-day window centered on the target day.
-  const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 2);
-  const days = generatePanchang({ startDate, totalDays: 5, events, location });
+  // Window: 1 day before (for kshaya/vriddhi/transit detection where target is `curr`)
+  // + target + 14 days after (for the "next 14 days" upcoming-events list and so the
+  // target can be the `prev` in kshaya detection against tomorrow).
+  const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
+  const days = generatePanchang({ startDate, totalDays: 16, events, location });
   return days.find((d) => {
     const target = new Date(date);
     return d.date === formatDateStr(target, location.tz);

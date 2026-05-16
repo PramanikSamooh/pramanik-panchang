@@ -189,16 +189,16 @@ export default function PanchangBody({
           fmtDate={fmtDate}
         />
 
-        {/* ── TL;DR verdict — combines tithi-pravritti, anandadi yoga, panchak/bhadra/mool, special yogas. ── */}
-        <SectionVerdict day={day} lang={lang} />
-
-        {/* ── Block 1: Essential / Now (Jain practice first) ── */}
-        {isToday && <SectionLiveNow day={day} lang={lang} isToday={isToday} nowMin={nowMin} fmt={fmt} />}
-        <SectionRasTyag day={day} lang={lang} isToday={isToday} />
+        {/* ── Block 1: Essential / Now (Jain practice first) ──
+            Order is mobile-first, single column on phones:
+              Events (parv/kalyanak) → Live Now → Directions (Disha + Vara Shoola)
+              → Ras Tyaag → Verdict (saar) → Tomorrow + Upcoming.
+            Live Now is gated by isToday — only shows for today's page. */}
         <SectionEvents day={day} lang={lang} isToday={isToday} />
-
-        {/* Add-to-calendar (iCal export) shortcut */}
-        <AddToCalendar day={day} lang={lang} dateParam={dateParam} />
+        {isToday && <SectionLiveNow day={day} lang={lang} isToday={isToday} nowMin={nowMin} fmt={fmt} />}
+        <SectionDirections day={day} lang={lang} />
+        <SectionRasTyag day={day} lang={lang} isToday={isToday} />
+        <SectionVerdict day={day} lang={lang} />
 
         <Grid2>
           <SectionTomorrow day={day} lang={lang} isToday={isToday} fmt={fmt} />
@@ -223,11 +223,10 @@ export default function PanchangBody({
           <SectionInauspicious day={day} lang={lang} fmt={fmt} />
         </Grid3>
 
-        <Grid3>
-          <SectionDirections day={day} lang={lang} />
+        <Grid2>
           <SectionPeriodFlags day={day} lang={lang} fmt={fmt} />
           <SectionSpecialYogas day={day} lang={lang} fmt={fmt} />
-        </Grid3>
+        </Grid2>
 
         <SectionChoghadiya day={day} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
         <SectionHora day={day} lang={lang} nowMin={nowMin} isToday={isToday} fmt={fmt} />
@@ -300,8 +299,18 @@ function Header({
         <strong>{fmtDate(day.date)}</strong> · {bilingual(day.varaHi, day.varaEn, lang)} · {loc.name}{" "}
         <span className="text-stone-500">({loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}, IST+0)</span>
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
-        <KV label={t(lang, "तिथि", "Date")} value={lang === "en" ? (day.vnsDateEn ?? day.vnsDateHi) : day.vnsDateHi} />
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+        <span className="inline-flex items-baseline gap-2">
+          <KV label={t(lang, "तिथि", "Date")} value={lang === "en" ? (day.vnsDateEn ?? day.vnsDateHi) : day.vnsDateHi} />
+          {day.kshayaTithi && (
+            <span
+              className="inline-flex items-baseline gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-300"
+              title={t(lang, "क्षय तिथि — आज में जोड़ी गई", "Kshaya tithi — merged into today")}
+            >
+              + {t(lang, "क्षय", "Kshaya")}: {bilingual(day.kshayaTithi.nameHi, day.kshayaTithi.nameEn, lang)}
+            </span>
+          )}
+        </span>
         <KV label={t(lang, "वी.नि.सं.", "Vir Nirvan Sa.")} value={fmtNum(day.samvats?.virNirvan)} />
         <KV label={t(lang, "म.जन्म सं.", "Mahavir Janma Sa.")} value={fmtNum(day.samvats?.mahavirJanma)} />
         <KV label={t(lang, "विक्रम सं.", "Vikram Sa.")} value={fmtNum(day.samvats?.vikram)} />
@@ -829,7 +838,7 @@ function SectionUpcoming({ day, lang, fmt }: { day: PanchangDay; lang: Lang; fmt
   return (
     <Section
       title={t(lang, `आगामी पर्व (${fmt.num(day.upcomingEvents.length)})`, `Upcoming (${fmt.num(day.upcomingEvents.length)})`)}
-      hint={t(lang, "अगले 30 दिन", "Next 30 days")}
+      hint={t(lang, "अगले 14 दिन", "Next 14 days")}
       accent="#0f766e"
     >
       <ul className="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
@@ -1501,22 +1510,3 @@ function SectionGlossary({ lang }: { lang: Lang }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Add-to-calendar — generates a /api/ical?date=YYYY-MM-DD download for the day's events.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function AddToCalendar({ day, lang, dateParam }: { day: PanchangDay; lang: Lang; dateParam: string }) {
-  const url = `/api/ical?date=${dateParam}`;
-  return (
-    <div className="mt-3 flex items-center justify-end">
-      <a
-        href={url}
-        download={`panchang-${day.date}.ics`}
-        className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-        title={t(lang, "इस दिन के पर्व/मुहूर्त .ics के रूप में डाउनलोड करें", "Download this day's events / muhurtas as .ics")}
-      >
-        📅 {t(lang, "कैलेंडर में जोड़ें (.ics)", "Add to Calendar (.ics)")}
-      </a>
-    </div>
-  );
-}

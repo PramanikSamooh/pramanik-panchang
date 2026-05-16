@@ -21,7 +21,9 @@ for (const ds of TEST_DATES) {
   if (!day) { console.log(ds + ": NULL"); continue; }
   console.log("─".repeat(70));
   console.log(`Date: ${day.date}  Vara: ${day.varaHi} (${day.varaEn})  VNS: ${day.vnsYear}`);
-  console.log(`Tithi: ${day.tithi.nameHi} ${day.tithi.pakshaHi} (${day.tithi.startTime}–${day.tithi.endTime})`);
+  console.log(`Tithi: ${day.tithi.nameHi} ${day.tithi.pakshaHi} #${day.tithi.number} (${day.tithi.startTime}–${day.tithi.endTime})`);
+  if (day.kshayaTithi) console.log(`  Kshaya: #${day.kshayaTithi.number} ${day.kshayaTithi.nameHi} (${day.kshayaTithi.nameEn})`);
+  if (day.isVriddhiRepeat) console.log(`  Vriddhi repeat day`);
   console.log(`Nakshatra: ${day.nakshatra?.nameHi} (ends ${day.nakshatra?.endTime})`);
   console.log(`Yoga: ${day.yoga?.nameHi} (ends ${day.yoga?.endTime})`);
   console.log(`Karana: ${day.karana?.nameHi} (ends ${day.karana?.endTime})`);
