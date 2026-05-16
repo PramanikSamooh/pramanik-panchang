@@ -189,6 +189,10 @@ export default function PanchangBody({
           fmtDate={fmtDate}
         />
 
+        {/* Eclipse banner — surfaced FIRST when an eclipse or its sutak window
+            overlaps this panchang day. Red, prominent, can't be missed. */}
+        <SectionEclipses day={day} lang={lang} />
+
         {/* ── Block 1: Essential / Now (Jain practice first) ──
             Order is mobile-first, single column on phones:
               Events (parv/kalyanak) → Live Now → Directions (Disha + Vara Shoola)
@@ -775,6 +779,91 @@ function SectionRasTyag({ day, lang, isToday }: { day: PanchangDay; lang: Lang; 
         </div>
       </div>
     </Section>
+  );
+}
+
+function SectionEclipses({ day, lang }: { day: PanchangDay; lang: Lang }) {
+  if (!day.eclipses || day.eclipses.length === 0) return null;
+  return (
+    <section className="mt-3 rounded-lg border-2 border-rose-500 bg-rose-50">
+      <header className="border-b-2 border-rose-500 bg-rose-100 px-3 py-1.5">
+        <h2 className="text-sm font-bold text-rose-900">
+          ⚠ {lang === "en" ? "Grahan / Eclipse" : "ग्रहण"}
+        </h2>
+        <div className="text-[10px] text-rose-700">
+          {lang === "en" ? "Eclipse and/or sutak window overlaps this panchang day" : "ग्रहण और/या सूतक काल इस दिन में सक्रिय है"}
+        </div>
+      </header>
+      <div className="space-y-3 p-3">
+        {day.eclipses.map((e, i) => {
+          const typeHi = e.type === "surya" ? "सूर्य ग्रहण" : "चन्द्र ग्रहण";
+          const typeEn = e.type === "surya" ? "Surya Grahan (Solar Eclipse)" : "Chandra Grahan (Lunar Eclipse)";
+          const kindMap: Record<string, { hi: string; en: string }> = {
+            total: { hi: "खग्रास (पूर्ण)", en: "Total" },
+            partial: { hi: "खण्डग्रास (आंशिक)", en: "Partial" },
+            annular: { hi: "वलयाकार", en: "Annular" },
+            hybrid: { hi: "संकर", en: "Hybrid" },
+            penumbral: { hi: "उपछाया", en: "Penumbral" },
+          };
+          const kind = kindMap[e.kind] ?? { hi: e.kind, en: e.kind };
+          return (
+            <div key={i} className="rounded border border-rose-300 bg-white p-2">
+              <div className="flex items-baseline justify-between flex-wrap gap-2">
+                <div>
+                  <span className="text-base font-bold text-rose-900">
+                    {lang === "en" ? typeEn : typeHi}
+                  </span>
+                  <span className="ml-2 rounded bg-rose-200 px-1.5 py-0.5 text-[11px] font-semibold text-rose-900">
+                    {lang === "en" ? kind.en : kind.hi}
+                  </span>
+                </div>
+                <span className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${
+                  e.visible
+                    ? "bg-amber-200 text-amber-900 ring-1 ring-amber-400"
+                    : "bg-stone-200 text-stone-700 ring-1 ring-stone-400"
+                }`}>
+                  {e.visible
+                    ? (lang === "en" ? "Visible from your city" : "आपके नगर से दृश्य")
+                    : (lang === "en" ? "Not visible here" : "यहाँ अदृश्य")}
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3">
+                <div>
+                  <div className="text-[10px] uppercase text-rose-600">{lang === "en" ? "Start (sparsha)" : "स्पर्श"}</div>
+                  <div className="font-mono font-semibold text-rose-900">{e.startTime}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-rose-600">{lang === "en" ? "Greatest (madhya)" : "मध्य"}</div>
+                  <div className="font-mono font-semibold text-rose-900">{e.maxTime}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-rose-600">{lang === "en" ? "End (moksha)" : "मोक्ष"}</div>
+                  <div className="font-mono font-semibold text-rose-900">{e.endTime}</div>
+                </div>
+              </div>
+              {e.visible && e.sutakStart && e.sutakEnd && (
+                <div className="mt-2 rounded bg-rose-100 px-2 py-1 text-xs ring-1 ring-rose-300">
+                  <strong>{lang === "en" ? "Sutak: " : "सूतक: "}</strong>
+                  <span className="font-mono">{e.sutakStart} → {e.sutakEnd}</span>
+                  <div className="text-[10px] italic text-rose-700">
+                    {e.type === "surya"
+                      ? (lang === "en" ? "Starts 12h before sparsha; pure worship/food avoided" : "स्पर्श से 12 घंटे पूर्व प्रारम्भ; पूजा-भोजन वर्जित")
+                      : (lang === "en" ? "Starts 9h before sparsha; pure worship/food avoided" : "स्पर्श से 9 घंटे पूर्व प्रारम्भ; पूजा-भोजन वर्जित")}
+                  </div>
+                </div>
+              )}
+              {!e.visible && (
+                <div className="mt-2 text-[11px] italic text-stone-600">
+                  {lang === "en"
+                    ? "Eclipse not visible from your location — sutak does not apply per most Hindu traditions."
+                    : "ग्रहण आपके स्थान से दृश्य नहीं — अधिकांश परम्पराओं अनुसार सूतक नहीं लगता।"}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

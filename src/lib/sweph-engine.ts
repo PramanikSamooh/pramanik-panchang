@@ -378,53 +378,49 @@ function lagnaAt(date: Date, lat: number, lng: number): number {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Find the most recent New Moon (Amavasya end) before a given date. */
-// All three find* functions sample at 6-hour intervals (not 24h). A tithi can be
-// shorter than 24h; sampling once per day at the same time-of-day was missing the
-// target tithi entirely whenever its window didn't cross the sample's time-of-day
-// (e.g. Sydney's sunrise+6ghati reference for May 18, 2026 skipped over the
-// May 16 Amavasya, silently corrupting Adhik detection and month naming).
-const FIND_STEP_MS = 6 * 3600 * 1000;
-const FIND_MAX_STEPS = 35 * 4; // ~35-day window
+// Direct moon-sun angle search. The moon-sun differential is a continuous,
+// monotonically-increasing-modulo-360 function — exactly one Amavasya (angle=0)
+// and exactly one Purnima (angle=180) per lunar cycle. So we can ESTIMATE where
+// the nearest crossing is using the synodic period, then call findCrossing on
+// a small bracket around the estimate. Robust by construction — does not depend
+// on landing inside any tithi's time-of-day window (the bug fixed earlier).
+const SYNODIC_MS = 29.530588 * DAY_MS;
+const SEARCH_HALF_WINDOW_MS = 2 * DAY_MS; // synodic period varies by <±0.2 days
 
 function findRecentAmavasya(date: Date): Date {
-  for (let s = 0; s < FIND_MAX_STEPS; s++) {
-    const probe = new Date(date.getTime() - s * FIND_STEP_MS);
-    if (tithiAt(probe) === 30) {
-      const before = new Date(probe.getTime() - FIND_STEP_MS);
-      const after = new Date(probe.getTime() + FIND_STEP_MS);
-      const cross = findCrossing(before, after, 0, moonMinusSun);
-      return cross || probe;
-    }
-  }
-  return new Date(date.getTime() - 30 * DAY_MS);
+  // Time since the most recent 0-crossing ≈ (current angle / 360) × synodic.
+  const M = moonMinusSun(date);
+  const estAgo = (M / 360) * SYNODIC_MS;
+  const estimate = new Date(date.getTime() - estAgo);
+  const before = new Date(estimate.getTime() - SEARCH_HALF_WINDOW_MS);
+  const after = new Date(estimate.getTime() + SEARCH_HALF_WINDOW_MS);
+  return findCrossing(before, after, 0, moonMinusSun) ?? estimate;
 }
 
 /** Find the most recent Purnima before a given date. */
 function findRecentPurnima(date: Date): Date {
-  for (let s = 0; s < FIND_MAX_STEPS; s++) {
-    const probe = new Date(date.getTime() - s * FIND_STEP_MS);
-    if (tithiAt(probe) === 15) {
-      const before = new Date(probe.getTime() - FIND_STEP_MS);
-      const after = new Date(probe.getTime() + FIND_STEP_MS);
-      const cross = findCrossing(before, after, 180, moonMinusSun);
-      return cross || probe;
-    }
-  }
-  return new Date(date.getTime() - 30 * DAY_MS);
+  // If angle < 180, last Purnima was the prior cycle's 180-crossing (offset = M + 180).
+  // If angle ≥ 180, last Purnima was earlier this cycle (offset = M - 180).
+  const M = moonMinusSun(date);
+  const offset = M < 180 ? (M + 180) : (M - 180);
+  const estAgo = (offset / 360) * SYNODIC_MS;
+  const estimate = new Date(date.getTime() - estAgo);
+  const before = new Date(estimate.getTime() - SEARCH_HALF_WINDOW_MS);
+  const after = new Date(estimate.getTime() + SEARCH_HALF_WINDOW_MS);
+  return findCrossing(before, after, 180, moonMinusSun) ?? estimate;
 }
 
 /** Find the next Purnima at or after a given date. */
 function findNextPurnima(date: Date): Date {
-  for (let s = 0; s < FIND_MAX_STEPS; s++) {
-    const probe = new Date(date.getTime() + s * FIND_STEP_MS);
-    if (tithiAt(probe) === 15) {
-      const before = new Date(probe.getTime() - FIND_STEP_MS);
-      const after = new Date(probe.getTime() + FIND_STEP_MS);
-      const cross = findCrossing(before, after, 180, moonMinusSun);
-      return cross || probe;
-    }
-  }
-  return new Date(date.getTime() + 30 * DAY_MS);
+  // If angle ≤ 180, next Purnima is this cycle (forward = 180 − M).
+  // If angle > 180, next Purnima is next cycle (forward = 540 − M).
+  const M = moonMinusSun(date);
+  const forward = M <= 180 ? (180 - M) : (540 - M);
+  const estAhead = (forward / 360) * SYNODIC_MS;
+  const estimate = new Date(date.getTime() + estAhead);
+  const before = new Date(estimate.getTime() - SEARCH_HALF_WINDOW_MS);
+  const after = new Date(estimate.getTime() + SEARCH_HALF_WINDOW_MS);
+  return findCrossing(before, after, 180, moonMinusSun) ?? estimate;
 }
 
 /**
@@ -459,6 +455,130 @@ function masaIndexPurnimanta(date: Date): number {
   const amavasyaBefore = findRecentAmavasya(nextPurnima);
   const rashi = Math.floor(sidLong(C.SE_SUN, amavasyaBefore) / 30);
   return (rashi + 1) % 12;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Eclipses (Surya Grahan / Chandra Grahan) + Sutak
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EclipseDetails {
+  type: "surya" | "chandra";
+  kind: "total" | "partial" | "annular" | "hybrid" | "penumbral";
+  visible: boolean;
+  /** Local YYYY-MM-DD of the peak. */
+  eclipseDate: string;
+  /** UTC: locally visible window if visible, else global. For DISPLAY. */
+  startUtc: Date;
+  maxUtc: Date;
+  endUtc: Date;
+  /** UTC: global astronomical contacts (used for sutak anchoring). */
+  globalStartUtc: Date;
+  globalEndUtc: Date;
+  magnitude: number;
+}
+
+/** Classify the eclipse "kind" from the SE_ECL_* flag bits returned by sweph. */
+function classifyEclipseKind(flag: number, type: "surya" | "chandra"): EclipseDetails["kind"] {
+  if (flag & 4) return "total";
+  if (flag & 8) return "annular";
+  if (flag & 32) return type === "chandra" ? "partial" : "hybrid";
+  if (flag & 16) return "partial";
+  if (flag & 64) return "penumbral";
+  return "partial";
+}
+
+/** Find the eclipse closest to `date` within ±2 days. Returns null if none.
+ *
+ *  Two sweph calls are made:
+ *    1. `*_when_loc`  → visibility flag + locally-visible contact times
+ *    2. `*_when`/`*_when_glob` → globally-true eclipse type + universal contact
+ *       times (used for sutak start calculation, which is anchored to global
+ *       umbra-begin / first-contact even if not locally visible at that moment).
+ *
+ *  Display "start/end" are the locally visible visible-window if visible,
+ *  otherwise the global universal times. */
+function findNearEclipse(
+  date: Date,
+  type: "surya" | "chandra",
+  loc: LocationConfig,
+): EclipseDetails | null {
+  const geopos: [number, number, number] = [loc.lng, loc.lat, 0];
+  const startJd = dateToJD(new Date(date.getTime() - 2 * DAY_MS));
+
+  type EclResponse = { flag: number; data: number[]; attributes?: number[] };
+  let local: EclResponse | null = null;
+  let global: EclResponse | null = null;
+  try {
+    if (type === "surya") {
+      local = sweph.sol_eclipse_when_loc(startJd, C.SEFLG_SWIEPH, geopos, false) as EclResponse;
+      global = sweph.sol_eclipse_when_glob(startJd, C.SEFLG_SWIEPH, 0, false) as EclResponse;
+    } else {
+      local = sweph.lun_eclipse_when_loc(startJd, C.SEFLG_SWIEPH, geopos, false) as EclResponse;
+      global = sweph.lun_eclipse_when(startJd, C.SEFLG_SWIEPH, 0, false) as EclResponse;
+    }
+  } catch { return null; }
+  if (!global || !global.data || global.data[0] <= 0) return null;
+
+  const peakJd = global.data[0];
+  const peakUtc = jdToDate(peakJd);
+  // Only accept if peak is within ±2 days of `date`.
+  if (Math.abs(peakUtc.getTime() - date.getTime()) > 2 * DAY_MS) return null;
+
+  // GLOBAL contact times (for sutak anchoring, even if not locally visible).
+  // Per sweph C library headers:
+  //   SOLAR sol_eclipse_when_glob:  [0]=max, [1]=noon if applicable, [2]=C1 (partial begin),
+  //                                  [3]=central begin, [4]=central end, [5]=C4 (partial end)
+  //   LUNAR lun_eclipse_when:       [0]=max, [1]=unused, [2]=umbra C1 (partial begin),
+  //                                  [3]=umbra C4 (partial end), [4]=totality begin,
+  //                                  [5]=totality end, [6]=penumbra begin, [7]=penumbra end
+  // Sutak is anchored to the umbra/C1 ↔ C4 phase (sparsha → moksha), not penumbra.
+  let globalStartJd: number;
+  let globalEndJd: number;
+  if (type === "surya") {
+    globalStartJd = global.data[2] > 0 ? global.data[2] : peakJd;
+    globalEndJd = global.data[5] > 0 ? global.data[5] : peakJd;
+  } else {
+    globalStartJd = global.data[2] > 0 ? global.data[2] : (global.data[6] > 0 ? global.data[6] : peakJd);
+    globalEndJd = global.data[3] > 0 ? global.data[3] : (global.data[7] > 0 ? global.data[7] : peakJd);
+  }
+
+  // Eclipse classification — use GLOBAL flag (true type), not locally-visible bits.
+  const globalFlag = global.flag ?? 0;
+  const kind = classifyEclipseKind(globalFlag, type);
+
+  // Visibility from location. CRITICAL: `*_when_loc` skips non-visible eclipses
+  // and returns the NEXT visible one. So we must verify the _loc peak matches
+  // the _glob peak within tight tolerance — otherwise _loc is reporting an
+  // unrelated future eclipse and its flags say nothing about THIS eclipse.
+  const localFlag = local?.flag ?? 0;
+  const localPeakJd = local?.data?.[0] ?? 0;
+  const peakMatchesLoc = localPeakJd > 0 && Math.abs(localPeakJd - peakJd) < 0.5; // within ½ day
+  const visible = peakMatchesLoc && (localFlag & 128) !== 0; // SE_ECL_VISIBLE bit from _loc
+
+  // Display contact times = GLOBAL astronomical contacts (sparsha → moksha).
+  // We previously tried to show only the locally-visible visible window, but
+  // sweph's _loc data[7] disambiguation (moonrise/set vs penumbra-end) is
+  // tradition-dependent and caused garbled display. Showing global contacts
+  // + a `visible` flag is unambiguous; users see the full astronomical timing
+  // and a "visible from your location" indicator separately.
+  const displayStartJd = globalStartJd;
+  const displayEndJd = globalEndJd;
+
+  const magnitude = global.attributes?.[0] ?? local?.attributes?.[0] ?? 0;
+
+  return {
+    type,
+    kind,
+    visible,
+    eclipseDate: formatDateStr(peakUtc, loc.tz),
+    startUtc: jdToDate(displayStartJd),
+    maxUtc: peakUtc,
+    endUtc: jdToDate(displayEndJd),
+    magnitude,
+    // Store global times separately for sutak calc (added below via type extension).
+    globalStartUtc: jdToDate(globalStartJd),
+    globalEndUtc: jdToDate(globalEndJd),
+  } as EclipseDetails & { globalStartUtc: Date; globalEndUtc: Date };
 }
 
 /** Adhika maas detection: lunar month with no sankranti (sun stays in same rashi). */
@@ -1161,6 +1281,39 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     specialYogas.push({ key: "dvipushkar", nameHi: "द्विपुष्कर योग", nameEn: "Dvipushkar Yoga", startTime: sunriseT, endTime: naksTithiOrSunriseEndT });
   }
 
+  // ── Eclipses (Surya Grahan / Chandra Grahan) + Sutak ───────────────────────
+  // We search for the eclipse nearest to today's reference instant in each
+  // family. If the eclipse or its sutak window overlaps THIS panchang day
+  // (sunrise → next sunrise), we surface it.
+  const eclipses: NonNullable<PanchangDay["eclipses"]> = [];
+  const dayStartMs = sunrise.getTime();
+  const dayEndMs = (nextSunriseForBoundary ?? new Date(sunrise.getTime() + DAY_MS)).getTime();
+  for (const eType of ["surya", "chandra"] as const) {
+    const ecl = findNearEclipse(ref, eType, loc);
+    if (!ecl) continue;
+    const sutakLeadMs = (eType === "surya" ? 12 : 9) * 3600 * 1000;
+    // Sutak window: [global first contact − lead, global last contact].
+    // Uses GLOBAL astronomical times — sutak doesn't care about local visibility
+    // of the start moment, only whether the eclipse is visible at all.
+    const sutakStartMs = ecl.globalStartUtc.getTime() - sutakLeadMs;
+    const sutakEndMs = ecl.globalEndUtc.getTime();
+    const eclipseOverlapsDay = ecl.endUtc.getTime() > dayStartMs && ecl.startUtc.getTime() < dayEndMs;
+    const sutakOverlapsDay = ecl.visible && sutakEndMs > dayStartMs && sutakStartMs < dayEndMs;
+    if (!eclipseOverlapsDay && !sutakOverlapsDay) continue;
+    eclipses.push({
+      type: ecl.type,
+      kind: ecl.kind,
+      visible: ecl.visible,
+      eclipseDate: ecl.eclipseDate,
+      startTime: formatTime(ecl.startUtc, loc.tz),
+      maxTime: formatTime(ecl.maxUtc, loc.tz),
+      endTime: formatTime(ecl.endUtc, loc.tz),
+      sutakStart: ecl.visible ? formatTime(new Date(sutakStartMs), loc.tz) : undefined,
+      sutakEnd: ecl.visible ? formatTime(new Date(sutakEndMs), loc.tz) : undefined,
+      magnitude: ecl.magnitude,
+    });
+  }
+
   // Bhadra (Vishti karana) periods within the civil day — sample at 30-min intervals,
   // then split each contiguous Vishti window into mukh / madhya / puchchha.
   type BhadraSeg = { startTime: string; endTime: string; part?: "mukh" | "madhya" | "puchchha" };
@@ -1343,6 +1496,7 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     panchak: isPanchak,
     bhadra: isBhadraActive ? { active: true, periods: bhadraPeriods } : { active: false },
     mool: isMool,
+    eclipses: eclipses.length > 0 ? eclipses : undefined,
     muhurtas,
     choghadiya,
     dishaShool: { direction: dishaShool.en, directionHi: dishaShool.hi },

@@ -174,6 +174,32 @@ export interface PanchangDay {
     combust: boolean;
   }>;
 
+  // ── Eclipses (Surya / Chandra Grahan) + Sutak ──
+  //
+  // Set whenever an eclipse OR its sutak window overlaps this panchang day.
+  // `visible: false` means the eclipse won't be visible from the user's location
+  // and therefore (per most Hindu traditions) no sutak applies — but we still
+  // surface it for awareness. Sutak window: 12h before first contact for solar,
+  // 9h before first contact for lunar, ending at last contact (moksha).
+  eclipses?: Array<{
+    type: "surya" | "chandra";
+    kind: "total" | "partial" | "annular" | "hybrid" | "penumbral";
+    visible: boolean;
+    /** ISO date (YYYY-MM-DD in local tz) on which the eclipse peak occurs. */
+    eclipseDate: string;
+    /** Start of grahan (first contact / sparsha) — global moment, not local visibility. */
+    startTime: string;     // HH:MM
+    /** Greatest eclipse (madhya). */
+    maxTime: string;
+    /** End of grahan (last contact / moksha). */
+    endTime: string;
+    /** Sutak window. Only meaningful if visible=true. */
+    sutakStart?: string;
+    sutakEnd?: string;
+    /** Eclipse magnitude (0..1+). */
+    magnitude?: number;
+  }>;
+
   // ── 24-hour Hora ribbon (planetary hours) ──
   /** Sequence of 24 horas spanning sunrise → next sunrise. The first 12 are day horas
    *  (each = day-duration / 12) and the next 12 are night horas (each = night-duration / 12).
