@@ -28,7 +28,7 @@ const VARA_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday
 
 const MASA_NAMES_EN = [
   "Chaitra", "Vaishakha", "Jyeshtha", "Ashadha", "Shravana", "Bhadrapada",
-  "Ashwin", "Kartik", "Margashirsha", "Pausha", "Magha", "Phalguna",
+  "Ashwin", "Kartika", "Margashirsha", "Pausha", "Magha", "Phalguna",
 ];
 
 const RITU_EN = ["Vasant", "Grishma", "Varsha", "Sharad", "Hemant", "Shishir"];
@@ -39,7 +39,7 @@ const RASHI_EN = [
 
 const YOGA_NAMES_EN = [
   "Vishkambha","Priti","Ayushman","Saubhagya","Shobhana","Atiganda",
-  "Sukarman","Dhriti","Shula","Ganda","Vriddhi","Dhruva","Vyaghata",
+  "Sukarma","Dhriti","Shula","Ganda","Vriddhi","Dhruva","Vyaghata",
   "Harshana","Vajra","Siddhi","Vyatipata","Variyana","Parigha",
   "Shiva","Siddha","Sadhya","Shubha","Shukla","Brahma","Indra","Vaidhriti",
 ];
@@ -70,9 +70,13 @@ function jdToDate(jd: number): Date {
 /** Format a Date as HH:MM in the configured tz. */
 function formatTime(d: Date | null, tzMinutes: number): string {
   if (!d || isNaN(d.getTime())) return "";
-  const local = new Date(d.getTime() + tzMinutes * 60 * 1000);
-  const hh = String(local.getUTCHours()).padStart(2, "0");
-  const mm = String(local.getUTCMinutes()).padStart(2, "0");
+  // Round to the nearest minute (Drik Panchang and most published panchangs round;
+  // truncating produced systematic 1-minute lows on every time field). Roll over
+  // hours/days correctly when seconds push past 60.
+  const ms = d.getTime() + tzMinutes * 60 * 1000;
+  const rounded = new Date(Math.round(ms / 60000) * 60000);
+  const hh = String(rounded.getUTCHours()).padStart(2, "0");
+  const mm = String(rounded.getUTCMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
 }
 
@@ -394,6 +398,20 @@ function findRecentPurnima(date: Date): Date {
   return new Date(date.getTime() - 30 * DAY_MS);
 }
 
+/** Find the next Purnima at or after a given date. */
+function findNextPurnima(date: Date): Date {
+  for (let d = 0; d < 35; d++) {
+    const probe = new Date(date.getTime() + d * DAY_MS);
+    if (tithiAt(probe) === 15) {
+      const before = new Date(probe.getTime() - DAY_MS);
+      const after = new Date(probe.getTime() + DAY_MS);
+      const cross = findCrossing(before, after, 180, moonMinusSun);
+      return cross || probe;
+    }
+  }
+  return new Date(date.getTime() + 30 * DAY_MS);
+}
+
 /**
  * Hindu month index (0..11, Chaitra=0) under Amanta (month begins after Amavasya).
  * The masa is named after the rashi the Sun occupies at the START of the lunar month.
@@ -407,15 +425,25 @@ function masaIndexAmanta(date: Date): number {
 
 /**
  * Hindu month index under Purnimanta (month begins after Purnima).
- * Convention: At the Purnima that began the current Purnimanta lunar month, Sun was in rashi R.
- * The just-completed lunar month is masa (R+1), and the new month starting at this Purnima is
- * masa (R+2). For example, Sun in Mesha (R=0) at Purnima → completed = Vaishakha (idx 1),
- * starting = Jyeshtha (idx 2).
+ *
+ * The Purnimanta month is named after the Amanta month that CONTAINS the next
+ * Purnima — i.e. the Amanta month whose Amavasya immediately precedes that
+ * Purnima. So:
+ *   1. Find the next Purnima after `date`.
+ *   2. Find the Amavasya immediately before that Purnima.
+ *   3. Sun's rashi at THAT Amavasya determines the masa (rashi + 1) mod 12.
+ *
+ * This anchors the name to a single unambiguous point (an Amavasya in mid-month)
+ * rather than a sankranti-adjacent boundary. Earlier implementations using
+ * `findRecentPurnima ± offset` mis-named months when the Sun crossed sankranti
+ * within a few days of a Purnima (produced "Ashwin" instead of "Bhadrapada" for
+ * Sept 15, 2026 — cross-checked against Drik Panchang).
  */
 function masaIndexPurnimanta(date: Date): number {
-  const startBoundary = findRecentPurnima(date);
-  const rashi = Math.floor(sidLong(C.SE_SUN, startBoundary) / 30);
-  return (rashi + 2) % 12;
+  const nextPurnima = findNextPurnima(date);
+  const amavasyaBefore = findRecentAmavasya(nextPurnima);
+  const rashi = Math.floor(sidLong(C.SE_SUN, amavasyaBefore) / 30);
+  return (rashi + 1) % 12;
 }
 
 /** Adhika maas detection: lunar month with no sankranti (sun stays in same rashi). */
@@ -487,7 +515,7 @@ interface MuhurtaSet {
 }
 
 function computeMuhurtas(
-  sunrise: Date, sunset: Date, vara: number, tz: number,
+  sunrise: Date, sunset: Date, vara: number, tz: number, nightMs?: number,
 ): MuhurtaSet {
   const dayMs = sunset.getTime() - sunrise.getTime();
   const eighth = dayMs / 8;
@@ -507,9 +535,15 @@ function computeMuhurtas(
   // Abhijit: 8th muhurta of the day = idx 7 of 15
   const abhijit = slotFifteenth(7);
 
-  // Brahma Muhurta: ~96 minutes before sunrise, lasting 48 minutes
-  const brahmaStart = new Date(sunrise.getTime() - 96 * 60 * 1000);
-  const brahmaEnd = new Date(sunrise.getTime() - 48 * 60 * 1000);
+  // Brahma Muhurta: night divided into 15 equal parts (night-muhurtas); Brahma is
+  // the 14th part (i.e. the part ending one night-muhurta before sunrise). Matches
+  // Drik Panchang's proportional convention. Caller passes nightMs = today's sunset
+  // → tomorrow's sunrise (a sub-1-min proxy for the actual prior night, which is
+  // yesterday's sunset → today's sunrise). Fallback: 24h - dayMs.
+  const nightLen = nightMs && nightMs > 0 ? nightMs : (24 * 3600 * 1000 - dayMs);
+  const nightPart = nightLen / 15;
+  const brahmaStart = new Date(sunrise.getTime() - 2 * nightPart);
+  const brahmaEnd = new Date(sunrise.getTime() - 1 * nightPart);
 
   return {
     abhijit,
@@ -783,6 +817,13 @@ const SARVARTHASIDDHI_BY_VARA: Record<number, number[]> = {
   6: [4, 8, 22, 27],
 };
 
+// Amrit Siddhi Yoga — single qualifying nakshatra per weekday (classical Drik table,
+// corroborated by astrobix.com and standard panchang references):
+//   Sun-Hasta, Mon-Mrigashira, Tue-Ashvini, Wed-Anuradha, Thu-Pushya, Fri-Revati, Sat-Rohini.
+const AMRITSIDDHI_BY_VARA: Record<number, number> = {
+  0: 13, 1: 5, 2: 1, 3: 17, 4: 8, 5: 27, 6: 4,
+};
+
 // Tripushkar: vara × nakshatra × tithi (last paksha-3) — common combinations
 function isTripushkar(vara: number, naks: number, _tithi: number): boolean {
   // Standard: Sunday/Tuesday/Saturday + (Vishakha/Krittika/Uttarashada/Uttarabhadrapada/Punarvasu)
@@ -1047,34 +1088,67 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   const vnsDateHi = `${hinduMonthHi}${adhikaSuffixHi} ${pakshaLabelHi} ${tithiNameHi}`;
   const vnsDateEn = `${hinduMonthEn}${adhikaSuffixEn} ${ut.paksha} ${tithiNameEn}`;
 
-  // Special yogas
+  // Special yogas — the qualifying vara×nakshatra (and for Tripushkar/Dvipushkar also
+  // tithi) combination breaks at whichever ends first: the nakshatra, the tithi (where
+  // it factors in), or the next sunrise (when the vara rolls over). Drikpanchang and
+  // other authoritative sources end Sarvarthasiddhi at next sunrise when the qualifying
+  // nakshatra extends past Monday's end.
+  //
+  // `nextSunriseForBoundary` is the next-day sunrise; the choghadiya block below
+  // computes its own `nextSunrise` from `date+DAY_MS` (local midnight) — we replicate
+  // the same boundary here so both paths agree.
   const specialYogas: SpecialYogaPeriod[] = [];
   const sunriseT = formatTime(sunrise, loc.tz);
   const sunsetT = formatTime(sunset, loc.tz);
+  const tomorrowMidnightForSY = new Date(date.getTime() + DAY_MS);
+  const { sunrise: nextSunriseForBoundary } = sunRiseSet(tomorrowMidnightForSY, loc);
+  const naksEnd = nakshatraEndTime(sunrise);
+  function earliestMs(...candidates: Array<Date | null>): Date | null {
+    let best: Date | null = null;
+    for (const c of candidates) {
+      if (!c) continue;
+      if (!best || c.getTime() < best.getTime()) best = c;
+    }
+    return best;
+  }
+  const naksOrSunriseEnd = earliestMs(naksEnd, nextSunriseForBoundary);
+  const naksTithiOrSunriseEnd = earliestMs(naksEnd, ut.tithiEnd, nextSunriseForBoundary);
+  const naksOrSunriseEndT = formatTime(naksOrSunriseEnd, loc.tz);
+  const naksTithiOrSunriseEndT = formatTime(naksTithiOrSunriseEnd, loc.tz);
+
   if (vara === 0 && naksRaw === 8) {
-    specialYogas.push({ key: "ravipushya", nameHi: "रवि पुष्य योग", nameEn: "Ravi Pushya Yoga", startTime: sunriseT, endTime: sunsetT });
+    specialYogas.push({ key: "ravipushya", nameHi: "रवि पुष्य योग", nameEn: "Ravi Pushya Yoga", startTime: sunriseT, endTime: naksOrSunriseEndT });
   }
   if (vara === 4 && naksRaw === 8) {
-    specialYogas.push({ key: "gurupushya", nameHi: "गुरु पुष्य योग", nameEn: "Guru Pushya Yoga", startTime: sunriseT, endTime: sunsetT });
+    specialYogas.push({ key: "gurupushya", nameHi: "गुरु पुष्य योग", nameEn: "Guru Pushya Yoga", startTime: sunriseT, endTime: naksOrSunriseEndT });
   }
   if ((SARVARTHASIDDHI_BY_VARA[vara] || []).includes(naksRaw)) {
-    specialYogas.push({ key: "sarvarthasiddhi", nameHi: "सर्वार्थसिद्धि योग", nameEn: "Sarvarthasiddhi Yoga", startTime: sunriseT, endTime: sunsetT });
+    specialYogas.push({ key: "sarvarthasiddhi", nameHi: "सर्वार्थसिद्धि योग", nameEn: "Sarvarthasiddhi Yoga", startTime: sunriseT, endTime: naksOrSunriseEndT });
+  }
+  if (AMRITSIDDHI_BY_VARA[vara] === naksRaw) {
+    specialYogas.push({ key: "amrit-siddhi", nameHi: "अमृत सिद्धि योग", nameEn: "Amrit Siddhi Yoga", startTime: sunriseT, endTime: naksOrSunriseEndT });
   }
   if (isTripushkar(vara, naksRaw, ut.tithi)) {
-    specialYogas.push({ key: "tripushkar", nameHi: "त्रिपुष्कर योग", nameEn: "Tripushkar Yoga", startTime: sunriseT, endTime: sunsetT });
+    specialYogas.push({ key: "tripushkar", nameHi: "त्रिपुष्कर योग", nameEn: "Tripushkar Yoga", startTime: sunriseT, endTime: naksTithiOrSunriseEndT });
   }
   if (isDvipushkar(vara, naksRaw, ut.tithi)) {
-    specialYogas.push({ key: "dvipushkar", nameHi: "द्विपुष्कर योग", nameEn: "Dvipushkar Yoga", startTime: sunriseT, endTime: sunsetT });
+    specialYogas.push({ key: "dvipushkar", nameHi: "द्विपुष्कर योग", nameEn: "Dvipushkar Yoga", startTime: sunriseT, endTime: naksTithiOrSunriseEndT });
   }
 
   // Bhadra (Vishti karana) periods within the civil day — sample at 30-min intervals,
   // then split each contiguous Vishti window into mukh / madhya / puchchha.
   type BhadraSeg = { startTime: string; endTime: string; part?: "mukh" | "madhya" | "puchchha" };
+  // Bhadra (Vishti karana) periods within the panchang day (sunrise → next sunrise).
+  // Sampling started at local midnight earlier — leaked pre-sunrise hours into the
+  // reported windows. Now we scan from sunrise to next sunrise.
   const bhadraPeriods: BhadraSeg[] = [];
   const rawWindows: Array<{ startMs: number; endMs: number }> = [];
   let bhadraOpen: Date | null = null;
-  for (let s = 0; s <= 48; s++) {
-    const probe = new Date(date.getTime() + s * 30 * 60 * 1000);
+  const scanStartMs = sunrise.getTime();
+  const scanEndMs = (nextSunriseForBoundary ?? new Date(sunrise.getTime() + DAY_MS)).getTime();
+  // Sample every 15 minutes for tighter window detection (was 30 min).
+  for (let probeMs = scanStartMs; probeMs <= scanEndMs; probeMs += 15 * 60 * 1000) {
+    const probe = new Date(probeMs);
     const isVishti = karanaInfoAt(probe).name === "Vishti";
     if (isVishti && !bhadraOpen) bhadraOpen = probe;
     else if (!isVishti && bhadraOpen) {
@@ -1083,8 +1157,7 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
     }
   }
   if (bhadraOpen) {
-    const endOfDay = new Date(date.getTime() + 24 * 3600 * 1000);
-    rawWindows.push({ startMs: bhadraOpen.getTime(), endMs: endOfDay.getTime() });
+    rawWindows.push({ startMs: bhadraOpen.getTime(), endMs: scanEndMs });
   }
   for (const w of rawWindows) {
     const startStr = formatTime(new Date(w.startMs), loc.tz);
@@ -1097,12 +1170,14 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   const isPanchak = naksRaw >= 23 && naksRaw <= 27;
   const isMool = [1, 9, 10, 18, 19, 27].includes(naksRaw);
 
-  // Muhurtas
-  const muhurtas = computeMuhurtas(sunrise, sunset, vara, loc.tz);
+  // Muhurtas — Brahma Muhurta needs night length (sunset → next sunrise) to apply
+  // the Drik-Panchang night/15 proportional formula. Reuse the already-computed
+  // next-day sunrise from the special-yogas section.
+  const nightMs = nextSunriseForBoundary ? nextSunriseForBoundary.getTime() - sunset.getTime() : undefined;
+  const muhurtas = computeMuhurtas(sunrise, sunset, vara, loc.tz, nightMs);
 
-  // Choghadiya — needs next day's sunrise
-  const tomorrowMidnight = new Date(date.getTime() + DAY_MS);
-  const { sunrise: nextSunrise } = sunRiseSet(tomorrowMidnight, loc);
+  // Choghadiya — needs next day's sunrise (reuse from special-yogas section).
+  const nextSunrise = nextSunriseForBoundary;
   const choghadiya = nextSunrise ? computeChoghadiya(sunrise, sunset, nextSunrise, vara, loc.tz) : undefined;
 
   // Extra muhurtas (Vijaya, Godhuli, Sandhya, Nishita)
