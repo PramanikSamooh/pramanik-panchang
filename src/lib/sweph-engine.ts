@@ -238,15 +238,22 @@ function sunRiseSet(dayMidnightLocal: Date, loc: LocationConfig): { sunrise: Dat
   return { sunrise: calc(SE_CALC_RISE), sunset: calc(SE_CALC_SET) };
 }
 
-/** Moonrise/moonset for the day. */
+/** Moonrise/moonset for the day.
+ *
+ * Hindu-panchang convention (matches Drik): moon's disc CENTER crossing the
+ * GEOMETRIC horizon (no refraction). Distinct from the Sun convention which uses
+ * upper limb + atmospheric refraction. Without these flags our moonrise was 4-5
+ * min early and moonset 4-5 min late vs Drik. */
+const MOON_RISE_BITS = (C.SE_BIT_DISC_CENTER ?? 256) | (C.SE_BIT_NO_REFRACTION ?? 512);
+
 function moonRiseSet(dayMidnightLocal: Date, loc: LocationConfig): { moonrise: Date | null; moonset: Date | null } {
   // jdStart = JD at local midnight. rise_trans finds the next rise/set strictly after jdStart,
-  // so this gives us today's first sunrise and today's first sunset.
+  // so this gives us today's first moonrise and moonset.
   const jdStart = dateToJD(dayMidnightLocal);
   const geopos: [number, number, number] = [loc.lng, loc.lat, 0];
   function calc(rsmi: number): Date | null {
     try {
-      const r = sweph.rise_trans(jdStart, C.SE_MOON, "", C.SEFLG_SWIEPH, rsmi, geopos, 1013.25, 15);
+      const r = sweph.rise_trans(jdStart, C.SE_MOON, "", C.SEFLG_SWIEPH, rsmi | MOON_RISE_BITS, geopos, 1013.25, 15);
       if (typeof r.data === "number" && r.data > 0) return jdToDate(r.data);
     } catch { /* ignore */ }
     return null;
@@ -371,12 +378,20 @@ function lagnaAt(date: Date, lat: number, lng: number): number {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Find the most recent New Moon (Amavasya end) before a given date. */
+// All three find* functions sample at 6-hour intervals (not 24h). A tithi can be
+// shorter than 24h; sampling once per day at the same time-of-day was missing the
+// target tithi entirely whenever its window didn't cross the sample's time-of-day
+// (e.g. Sydney's sunrise+6ghati reference for May 18, 2026 skipped over the
+// May 16 Amavasya, silently corrupting Adhik detection and month naming).
+const FIND_STEP_MS = 6 * 3600 * 1000;
+const FIND_MAX_STEPS = 35 * 4; // ~35-day window
+
 function findRecentAmavasya(date: Date): Date {
-  for (let d = 0; d < 35; d++) {
-    const probe = new Date(date.getTime() - d * DAY_MS);
+  for (let s = 0; s < FIND_MAX_STEPS; s++) {
+    const probe = new Date(date.getTime() - s * FIND_STEP_MS);
     if (tithiAt(probe) === 30) {
-      const before = new Date(probe.getTime() - DAY_MS);
-      const after = new Date(probe.getTime() + DAY_MS);
+      const before = new Date(probe.getTime() - FIND_STEP_MS);
+      const after = new Date(probe.getTime() + FIND_STEP_MS);
       const cross = findCrossing(before, after, 0, moonMinusSun);
       return cross || probe;
     }
@@ -386,11 +401,11 @@ function findRecentAmavasya(date: Date): Date {
 
 /** Find the most recent Purnima before a given date. */
 function findRecentPurnima(date: Date): Date {
-  for (let d = 0; d < 35; d++) {
-    const probe = new Date(date.getTime() - d * DAY_MS);
+  for (let s = 0; s < FIND_MAX_STEPS; s++) {
+    const probe = new Date(date.getTime() - s * FIND_STEP_MS);
     if (tithiAt(probe) === 15) {
-      const before = new Date(probe.getTime() - DAY_MS);
-      const after = new Date(probe.getTime() + DAY_MS);
+      const before = new Date(probe.getTime() - FIND_STEP_MS);
+      const after = new Date(probe.getTime() + FIND_STEP_MS);
       const cross = findCrossing(before, after, 180, moonMinusSun);
       return cross || probe;
     }
@@ -400,11 +415,11 @@ function findRecentPurnima(date: Date): Date {
 
 /** Find the next Purnima at or after a given date. */
 function findNextPurnima(date: Date): Date {
-  for (let d = 0; d < 35; d++) {
-    const probe = new Date(date.getTime() + d * DAY_MS);
+  for (let s = 0; s < FIND_MAX_STEPS; s++) {
+    const probe = new Date(date.getTime() + s * FIND_STEP_MS);
     if (tithiAt(probe) === 15) {
-      const before = new Date(probe.getTime() - DAY_MS);
-      const after = new Date(probe.getTime() + DAY_MS);
+      const before = new Date(probe.getTime() - FIND_STEP_MS);
+      const after = new Date(probe.getTime() + FIND_STEP_MS);
       const cross = findCrossing(before, after, 180, moonMinusSun);
       return cross || probe;
     }
@@ -1128,6 +1143,17 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   if (AMRITSIDDHI_BY_VARA[vara] === naksRaw) {
     specialYogas.push({ key: "amrit-siddhi", nameHi: "अमृत सिद्धि योग", nameEn: "Amrit Siddhi Yoga", startTime: sunriseT, endTime: naksOrSunriseEndT });
   }
+  // Ravi Yoga — Moon's nakshatra is in the 4th, 6th, 9th, 10th, 13th, or 20th
+  // position (1-indexed, inclusive) from Sun's nakshatra at sunrise. Window runs
+  // from sunrise to end of current moon-nakshatra (capped at next sunrise).
+  {
+    const sunNak0 = sunNak; // 0-indexed
+    const moonNak0 = naksRaw - 1;
+    const distance = ((moonNak0 - sunNak0) + 27) % 27 + 1; // 1-indexed
+    if ([4, 6, 9, 10, 13, 20].includes(distance)) {
+      specialYogas.push({ key: "ravi", nameHi: "रवि योग", nameEn: "Ravi Yoga", startTime: sunriseT, endTime: naksOrSunriseEndT });
+    }
+  }
   if (isTripushkar(vara, naksRaw, ut.tithi)) {
     specialYogas.push({ key: "tripushkar", nameHi: "त्रिपुष्कर योग", nameEn: "Tripushkar Yoga", startTime: sunriseT, endTime: naksTithiOrSunriseEndT });
   }
@@ -1146,15 +1172,30 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   let bhadraOpen: Date | null = null;
   const scanStartMs = sunrise.getTime();
   const scanEndMs = (nextSunriseForBoundary ?? new Date(sunrise.getTime() + DAY_MS)).getTime();
-  // Sample every 15 minutes for tighter window detection (was 30 min).
-  for (let probeMs = scanStartMs; probeMs <= scanEndMs; probeMs += 15 * 60 * 1000) {
-    const probe = new Date(probeMs);
-    const isVishti = karanaInfoAt(probe).name === "Vishti";
-    if (isVishti && !bhadraOpen) bhadraOpen = probe;
-    else if (!isVishti && bhadraOpen) {
-      rawWindows.push({ startMs: bhadraOpen.getTime(), endMs: probe.getTime() });
+  const SAMPLE_MS = 5 * 60 * 1000;
+  // Refine a coarse-sample transition down to ~5-sec precision via bisection.
+  function refineEdge(t0: number, t1: number, openingState: boolean): number {
+    let lo = t0, hi = t1;
+    while (hi - lo > 5000) {
+      const mid = (lo + hi) / 2;
+      const isVishti = karanaInfoAt(new Date(mid)).name === "Vishti";
+      if (isVishti === openingState) lo = mid; else hi = mid;
+    }
+    return openingState ? hi : lo;
+  }
+  let prevWasVishti = karanaInfoAt(new Date(scanStartMs)).name === "Vishti";
+  if (prevWasVishti) bhadraOpen = new Date(scanStartMs);
+  for (let probeMs = scanStartMs + SAMPLE_MS; probeMs <= scanEndMs; probeMs += SAMPLE_MS) {
+    const isVishti = karanaInfoAt(new Date(probeMs)).name === "Vishti";
+    if (isVishti && !prevWasVishti) {
+      const edge = refineEdge(probeMs - SAMPLE_MS, probeMs, false);
+      bhadraOpen = new Date(edge);
+    } else if (!isVishti && prevWasVishti && bhadraOpen) {
+      const edge = refineEdge(probeMs - SAMPLE_MS, probeMs, true);
+      rawWindows.push({ startMs: bhadraOpen.getTime(), endMs: edge });
       bhadraOpen = null;
     }
+    prevWasVishti = isVishti;
   }
   if (bhadraOpen) {
     rawWindows.push({ startMs: bhadraOpen.getTime(), endMs: scanEndMs });
