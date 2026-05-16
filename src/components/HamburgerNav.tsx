@@ -10,6 +10,7 @@ import { BRAND } from "@/lib/branding";
 
 const NAV_LINKS = [
   { href: "/", label: "Daily Panchang", emoji: "📿" },
+  { href: "/find-muhurta", label: "Find Muhurta", emoji: "⏱" },
   { href: "/learn", label: "Learn to see Panchang", emoji: "📖" },
   { href: "/generate", label: "Generate Year", emoji: "📅" },
   { href: "/events", label: "Events Master", emoji: "🪔" },
