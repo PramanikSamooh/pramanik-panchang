@@ -525,15 +525,16 @@ function matchEventsForDate(
       isMatch = true;
     }
 
-    // Adhika-maas gate (only applies to events selected by a Hindu-month rule, not fixedDate/Gregorian)
-    // Default "both" so events fire on every occurrence of the month (adhika + nija).
-    // Per-event override to "nija-only" or "adhika-only" allows fine-grained control.
-    if (isMatch && !event.fixedDate && !event.gregorianOverrides?.[yearStr]) {
-      const policy = event.adhikaMaasPolicy ?? "both";
+    // Adhik-mas gate. Default = NIJA-ONLY (Jain Vardhman Calendar convention:
+    // parvas/kalyanaks/vrats are observed in the regular month, not the
+    // intercalary adhik mas). Exempt rule-types: fixedDate, gregorianOverrides,
+    // nakshatraRule (the last is a monthly observance per nakshatra, fires
+    // every cycle including any adhik month).
+    if (isMatch && !event.fixedDate && !event.gregorianOverrides?.[yearStr] && !event.nakshatraRule) {
+      const policy = event.adhikaMaasPolicy ?? "nija-only";
       if (policy === "nija-only" && masaIsAdhika) isMatch = false;
       else if (policy === "adhika-only" && !masaIsAdhika) isMatch = false;
       else if (policy === "skip") isMatch = false;
-      // "both" → always match
     }
 
     if (isMatch) {

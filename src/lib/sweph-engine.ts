@@ -1877,8 +1877,14 @@ function matchEventsForDate(
       event.hinduPaksha === paksha &&
       event.hinduTithi === tithiNumber
     ) isMatch = true;
-    if (isMatch && !event.fixedDate && !event.gregorianOverrides?.[yearStr]) {
-      const policy = event.adhikaMaasPolicy ?? "both";
+    // Adhik-mas filter. Default for month/tithi-based events is NIJA-ONLY (per Jain
+    // Vardhman Calendar convention: parvas, kalyanaks and vrats are observed in
+    // the regular month, not the intercalary adhik mas). Exempt rule-types:
+    //  - fixedDate / gregorianOverrides: civil-date anchored, no adhik notion
+    //  - nakshatraRule: nakshatra-anchored (Rohini Vrat fires every Rohini month
+    //    including any adhik month, per tradition — it's a monthly observance)
+    if (isMatch && !event.fixedDate && !event.gregorianOverrides?.[yearStr] && !event.nakshatraRule) {
+      const policy = event.adhikaMaasPolicy ?? "nija-only";
       if (policy === "nija-only" && masaIsAdhika) isMatch = false;
       else if (policy === "adhika-only" && !masaIsAdhika) isMatch = false;
       else if (policy === "skip") isMatch = false;
