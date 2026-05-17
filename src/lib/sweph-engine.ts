@@ -511,7 +511,8 @@ function findNearEclipse(
   try {
     if (type === "surya") {
       local = sweph.sol_eclipse_when_loc(startJd, C.SEFLG_SWIEPH, geopos, false) as EclResponse;
-      global = sweph.sol_eclipse_when_glob(startJd, C.SEFLG_SWIEPH, 0, false) as EclResponse;
+      // sol_eclipse_when_glob has a numeric `backwards` arg (unlike the other three).
+      global = sweph.sol_eclipse_when_glob(startJd, C.SEFLG_SWIEPH, 0, 0) as EclResponse;
     } else {
       local = sweph.lun_eclipse_when_loc(startJd, C.SEFLG_SWIEPH, geopos, false) as EclResponse;
       global = sweph.lun_eclipse_when(startJd, C.SEFLG_SWIEPH, 0, false) as EclResponse;
