@@ -42,8 +42,13 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Liveness probe — server.js answers on / once it's ready.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
+# Liveness probe — hit a tiny /api/health endpoint that returns immediately
+# without touching the panchang engine. Hitting / would redirect to /d/<today>
+# and trigger a full sweph compute; in production the .se1 ephemeris files
+# aren't bundled so sweph falls back to Moshier (~30× slower) and the cold-start
+# compute can exceed the timeout. Longer start-period gives the Node process
+# room to come up before the first probe runs.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1
 
 CMD ["node", "server.js"]
