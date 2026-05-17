@@ -1705,12 +1705,20 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
     }
   }
 
-  // First-occurrence-wins (adhika-maas de-dup)
+  // First-occurrence-wins de-dup.
   //
-  // Single-tithi events (like a kalyanak on Jyeshtha Krishna 14) can match twice in an adhika-maas
-  // year — once in nija Jyeshtha and once in adhika Jyeshtha. We keep only the first match per
-  // civil year. Adhika-aware matching (via `adhikaMaasPolicy`) already handles the policy;
-  // this rule is a safety net for events without an explicit policy.
+  // Even after the per-event adhik-mas policy filter (default "nija-only") runs,
+  // a single event can still match on TWO different days within the year because
+  // matchEventsForDate runs the Amanta and Purnimanta passes independently. A
+  // kalyanak on "Jyeshtha Krishna 14" matches at the Purnimanta date (early in
+  // the year, often kshaya-merged to the day before adhik begins) AND at the
+  // Amanta date (in nija Jyeshtha, later in the year). The Vardhman calendar
+  // publishes only the EARLIER (Purnimanta) placement — verified visually
+  // against May/June/July 2026 pages.
+  //
+  // This de-dup keeps the earliest match per event-id per year. Multi-day vrats
+  // (tithiRange) and nakshatraRule events are exempt — they intrinsically fire
+  // on multiple consecutive days.
   //
   // EXEMPT (always fire, no de-dup):
   //  - fixedDate / nakshatraRule events (no calendar ambiguity)
