@@ -17,16 +17,17 @@ const LOC = { lat: 23.1765, lng: 75.7885, tz: 330 };
 const events = getAllJainEvents();
 const days = generatePanchang({ startDate: new Date(2026, 4, 1), totalDays: 92, events, location: LOC });
 
-// Published Vardhman placements I extracted visually from the calendar PDF
-// (pages 5-7, 350-dpi rendering, right-margin "तीर्थंकर दर्पण" sections):
+// Published Vardhman 2026 placements (verified against the calendar PDF
+// pages 5-7, May-Jul window with adhik Jyeshtha — corrections after user
+// reading the high-res scans):
 const VARDHMAN_REFS: Array<{ date: string; expect: string[] }> = [
   // MAY (Pratham/Adhik Jyeshtha page header)
-  { date: "2026-05-08", expect: ["bandinath"] }, // 8 - बंदीनाथजी
+  { date: "2026-05-08", expect: ["shreyanasanatha-garbh"] },                        // 8 - श्रेयांसनाथ गर्भ
   { date: "2026-05-15", expect: ["shantinatha-janma", "shantinatha-tap", "shantinatha-moksha"] }, // 15 - शान्ति जयन्ती - तप
-  { date: "2026-05-16", expect: ["naminatha-moksha"] }, // 16 - दर्शनेमि (Naminath) मोक्ष
+  // May 16 — "Shani Amavasya" label only, no Tirthankar event.
   // JUNE (Dwitiya/Nija Jyeshtha page header)
-  { date: "2026-06-18", expect: ["dharmanatha-moksha"] }, // 18 - धर्मनाथ मोक्ष
-  { date: "2026-06-24", expect: ["suparshvanatha"] }, // 24 - सुपार्श्वनाथ जन्म/तप (Vardhman lists Jun 24)
+  { date: "2026-06-18", expect: ["dharmanatha-moksha"] },                            // 18 - धर्मनाथ मोक्ष
+  { date: "2026-06-26", expect: ["suparshvanatha-janma", "suparshvanatha-tap"] },    // 26 - सुपार्श्वनाथ जन्म-तप
 ];
 
 console.log("PART A — calendar-published placements\n");
