@@ -487,23 +487,24 @@ function classifyEclipseKind(flag: number, type: "surya" | "chandra"): EclipseDe
   return "partial";
 }
 
-/** Find the eclipse closest to `date` within ±2 days. Returns null if none.
+/** Find the NEXT eclipse of `type` at or after `fromDate` (no ±2-day filter).
+ *  Sweph eclipse searches are expensive (especially in production where the
+ *  Moshier fallback is ~30× slower than the .se1 ephemeris files), so call
+ *  this ONCE per generation window via `findAllEclipsesInWindow`, not per-day.
  *
  *  Two sweph calls are made:
  *    1. `*_when_loc`  → visibility flag + locally-visible contact times
  *    2. `*_when`/`*_when_glob` → globally-true eclipse type + universal contact
  *       times (used for sutak start calculation, which is anchored to global
  *       umbra-begin / first-contact even if not locally visible at that moment).
- *
- *  Display "start/end" are the locally visible visible-window if visible,
- *  otherwise the global universal times. */
-function findNearEclipse(
-  date: Date,
+ */
+function findNextEclipseAfter(
+  fromDate: Date,
   type: "surya" | "chandra",
   loc: LocationConfig,
 ): EclipseDetails | null {
   const geopos: [number, number, number] = [loc.lng, loc.lat, 0];
-  const startJd = dateToJD(new Date(date.getTime() - 2 * DAY_MS));
+  const startJd = dateToJD(fromDate);
 
   type EclResponse = { flag: number; data: number[]; attributes?: number[] };
   let local: EclResponse | null = null;
@@ -511,8 +512,13 @@ function findNearEclipse(
   try {
     if (type === "surya") {
       local = sweph.sol_eclipse_when_loc(startJd, C.SEFLG_SWIEPH, geopos, false) as EclResponse;
-      // sol_eclipse_when_glob has a numeric `backwards` arg (unlike the other three).
-      global = sweph.sol_eclipse_when_glob(startJd, C.SEFLG_SWIEPH, 0, 0) as EclResponse;
+      // The sweph npm `index.d.ts` declares `backwards: number` for this one
+      // function, but the C binding actually validates it as a boolean at
+      // runtime (TypeError: "Argument 4 should be a boolean — backwards
+      // search"). Pass `false` and bypass the (incorrect) type via assertion.
+      global = (sweph.sol_eclipse_when_glob as unknown as (
+        tjd: number, ifl: number, iftype: number, backwards: boolean,
+      ) => EclResponse)(startJd, C.SEFLG_SWIEPH, 0, false);
     } else {
       local = sweph.lun_eclipse_when_loc(startJd, C.SEFLG_SWIEPH, geopos, false) as EclResponse;
       global = sweph.lun_eclipse_when(startJd, C.SEFLG_SWIEPH, 0, false) as EclResponse;
@@ -522,8 +528,6 @@ function findNearEclipse(
 
   const peakJd = global.data[0];
   const peakUtc = jdToDate(peakJd);
-  // Only accept if peak is within ±2 days of `date`.
-  if (Math.abs(peakUtc.getTime() - date.getTime()) > 2 * DAY_MS) return null;
 
   // GLOBAL contact times (for sutak anchoring, even if not locally visible).
   // Per sweph C library headers:
@@ -580,6 +584,33 @@ function findNearEclipse(
     globalStartUtc: jdToDate(globalStartJd),
     globalEndUtc: jdToDate(globalEndJd),
   } as EclipseDetails & { globalStartUtc: Date; globalEndUtc: Date };
+}
+
+/** Find ALL eclipses (Surya + Chandra) whose peak falls inside the window. Pads
+ *  ±2 days to catch sutak that crosses the window boundary. Returns at most 2-3
+ *  eclipses per type per window (eclipses come ~6 months apart). One sweph call
+ *  per type per next-eclipse search. Total ≤ ~6 sweph eclipse calls regardless
+ *  of window size — vs 4 calls per day in the previous per-day approach. */
+function findAllEclipsesInWindow(
+  windowStart: Date,
+  windowEnd: Date,
+  loc: LocationConfig,
+): EclipseDetails[] {
+  const padStart = new Date(windowStart.getTime() - 2 * DAY_MS);
+  const padEnd = new Date(windowEnd.getTime() + 2 * DAY_MS);
+  const out: EclipseDetails[] = [];
+  for (const type of ["surya", "chandra"] as const) {
+    let cursor = padStart;
+    let safety = 0;
+    while (cursor.getTime() < padEnd.getTime() && safety++ < 10) {
+      const ecl = findNextEclipseAfter(cursor, type, loc);
+      if (!ecl) break;
+      if (ecl.maxUtc.getTime() > padEnd.getTime()) break;
+      out.push(ecl);
+      cursor = new Date(ecl.maxUtc.getTime() + 2 * DAY_MS);
+    }
+  }
+  return out;
 }
 
 /** Adhika maas detection: lunar month with no sankranti (sun stays in same rashi). */
@@ -1173,7 +1204,7 @@ function splitBhadraIntoParts(
 // Per-day computation
 // ─────────────────────────────────────────────────────────────────────────────
 
-function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
+function computeDay(date: Date, loc: LocationConfig, windowEclipses?: EclipseDetails[]): PanchangDay | null {
   const { sunrise, sunset } = sunRiseSet(date, loc);
   if (!sunrise || !sunset) return null;
 
@@ -1283,19 +1314,13 @@ function computeDay(date: Date, loc: LocationConfig): PanchangDay | null {
   }
 
   // ── Eclipses (Surya Grahan / Chandra Grahan) + Sutak ───────────────────────
-  // We search for the eclipse nearest to today's reference instant in each
-  // family. If the eclipse or its sutak window overlaps THIS panchang day
-  // (sunrise → next sunrise), we surface it.
+  // `windowEclipses` is pre-computed ONCE per generation window (see
+  // `findAllEclipsesInWindow`). Per-day work is just an overlap check.
   const eclipses: NonNullable<PanchangDay["eclipses"]> = [];
   const dayStartMs = sunrise.getTime();
   const dayEndMs = (nextSunriseForBoundary ?? new Date(sunrise.getTime() + DAY_MS)).getTime();
-  for (const eType of ["surya", "chandra"] as const) {
-    const ecl = findNearEclipse(ref, eType, loc);
-    if (!ecl) continue;
-    const sutakLeadMs = (eType === "surya" ? 12 : 9) * 3600 * 1000;
-    // Sutak window: [global first contact − lead, global last contact].
-    // Uses GLOBAL astronomical times — sutak doesn't care about local visibility
-    // of the start moment, only whether the eclipse is visible at all.
+  for (const ecl of windowEclipses ?? []) {
+    const sutakLeadMs = (ecl.type === "surya" ? 12 : 9) * 3600 * 1000;
     const sutakStartMs = ecl.globalStartUtc.getTime() - sutakLeadMs;
     const sutakEndMs = ecl.globalEndUtc.getTime();
     const eclipseOverlapsDay = ecl.endUtc.getTime() > dayStartMs && ecl.startUtc.getTime() < dayEndMs;
@@ -1567,13 +1592,22 @@ export function generatePanchang(opts: GenerateOptions): PanchangDay[] {
   const activeEvents = events.filter((e) => e.isActive);
   const allDays: PanchangDay[] = [];
 
+  // Eclipses + sutak: search once per generation window (sweph eclipse searches
+  // are ~30× slower under the Moshier fallback used in production), then each
+  // computeDay just checks overlap. Was per-day → was timing out the production
+  // healthcheck for 16-day windows on first page load.
+  const windowEnd = new Date(
+    startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + totalDays,
+  );
+  const windowEclipses = findAllEclipsesInWindow(startDate, windowEnd, location);
+
   for (let i = 0; i < totalDays; i++) {
     const date = new Date(
       startDate.getFullYear(),
       startDate.getMonth(),
       startDate.getDate() + i,
     );
-    const day = computeDay(date, location);
+    const day = computeDay(date, location, windowEclipses);
     if (day) allDays.push(day);
     onProgress?.(i + 1, totalDays);
   }
